@@ -21,31 +21,52 @@ def local_update(bus_index, x_m, z, lambda_m, rho, network_data):
     
     # Define the local objective function
     def local_objective(vars):
-        # vars = [PG_i, QG_i, V_i, theta_i, Pij_i, Qij_i]
-        # Unpack variables
-        PG_i, QG_i, V_i, theta_i = vars[:4]
-        Pij_i = vars[4:4 + num_neighbors]
-        Qij_i = vars[4 + num_neighbors:]
+        """
+        Computes the local objective for the bus.
         
-        # Generation cost (assuming quadratic cost function)
-        a_i = network_data['gen_costs'][bus_index]['a']
-        b_i = network_data['gen_costs'][bus_index]['b']
-        c_i = network_data['gen_costs'][bus_index]['c']
-        cost = a_i * PG_i**2 + b_i * PG_i + c_i
+        Parameters:
+        - vars: Numpy array containing [PG_i, QG_i, V_i, theta_i, Pij_i..., Qij_i...]
+        
+        Returns:
+        - total_objective: Scalar value of the objective function.
+        """
+        # Unpack variables
+        PG_i_var, QG_i_var, V_i_var, theta_i_var = vars[:4]
+        Pij_i_var = vars[4:4 + num_neighbors]
+        Qij_i_var = vars[4 + num_neighbors:]
+        
+        # Generation cost (quadratic)
+        # Handle multiple generators at the same bus
+        # If multiple generators exist, sum their costs
+        if isinstance(network_data['gen_costs'][bus_index], list):
+            cost = 0
+            for gen_cost in network_data['gen_costs'][bus_index]:
+                a_i = gen_cost['a']
+                b_i = gen_cost['b']
+                c_i = gen_cost['c']
+                # Assuming one generator per 'a_i', 'b_i', 'c_i'
+                cost += a_i * PG_i_var**2 + b_i * PG_i_var + c_i
+        else:
+            a_i = network_data['gen_costs'][bus_index]['a']
+            b_i = network_data['gen_costs'][bus_index]['b']
+            c_i = network_data['gen_costs'][bus_index]['c']
+            cost = a_i * PG_i_var**2 + b_i * PG_i_var + c_i
         
         # Augmented Lagrangian terms
-        consensus_violation = np.concatenate([
-            Pij_i - z['Pij'][bus_index, neighbors],
-            Qij_i - z['Qij'][bus_index, neighbors]
-        ])
+        consensus_violation_P = Pij_i_var - z['Pij'][bus_index, neighbors]
+        consensus_violation_Q = Qij_i_var - z['Qij'][bus_index, neighbors]
+        consensus_violation = np.concatenate([consensus_violation_P, consensus_violation_Q])
+        
         dual_terms = np.sum(
-            lambda_m['Pij'][bus_index, neighbors] * (Pij_i - z['Pij'][bus_index, neighbors]) + \
-            lambda_m['Qij'][bus_index, neighbors] * (Qij_i - z['Qij'][bus_index, neighbors])
+            lambda_m['Pij'][bus_index, neighbors] * consensus_violation_P + 
+            lambda_m['Qij'][bus_index, neighbors] * consensus_violation_Q
         )
+        
         penalty_terms = (rho / 2.0) * np.sum(consensus_violation**2)
         
         # Compute constraint violations
         constraints = compute_constraints(vars, bus_index, network_data)
+        
         # Penalty coefficient for constraints
         penalty_coefficient = network_data.get('penalty_coefficient', 1e5)
         constraint_penalty = penalty_coefficient * np.sum(np.array(constraints)**2)
@@ -233,22 +254,49 @@ def compute_constraints(vars, bus_index, network_data):
 
 def simple_gradient_descent(objective_func, vars_init, constraints_func, bounds, args, max_iter=100, alpha=0.01):
     """
-    A simple gradient descent optimizer.
+    A simple gradient descent optimizer that incorporates constraints.
+    
+    Parameters:
+    - objective_func: The objective function to minimize.
+    - vars_init: Initial guess for the variables (numpy array).
+    - constraints_func: Function that computes the constraints.
+    - bounds: List of tuples specifying (min, max) bounds for each variable.
+    - args: Dictionary containing additional arguments required by objective and constraints functions.
+    - max_iter: Maximum number of iterations for the optimizer.
+    - alpha: Learning rate.
+    
+    Returns:
+    - vars: Optimized variables as a numpy array.
     """
     vars = vars_init.copy()
-    for _ in range(max_iter):
-        # Compute gradient
+    
+    for iteration in range(max_iter):
+        # Compute the objective value
+        cost = objective_func(vars)
+        
+        # Compute the gradient
         grad = compute_gradient(objective_func, vars, args)
-        # Update variables
+        
+        # Update variables using gradient descent
         vars = vars - alpha * grad
-        # Project variables onto bounds
-        vars = np.clip(vars, [b[0] if b[0] is not None else -np.inf for b in bounds],
-                             [b[1] if b[1] is not None else np.inf for b in bounds])
-        # Check constraints (you can implement a penalty method if constraints are violated)
-        constraint_vals = constraints_func(vars)
+        
+        # Project variables onto their bounds
+        lower_bounds = np.array([b[0] if b[0] is not None else -np.inf for b in bounds])
+        upper_bounds = np.array([b[1] if b[1] is not None else np.inf for b in bounds])
+        vars = np.clip(vars, lower_bounds, upper_bounds)
+        
+        # Compute constraint violations
+        constraint_vals = constraints_func(vars, args['bus_index'], args['network_data'])
+        
+        # Check if all constraints are satisfied within the tolerance
         if np.all(np.abs(constraint_vals) < 1e-4):
+            print(f"Converged in {iteration+1} iterations.")
             break
+    else:
+        print(f"Reached maximum iterations ({max_iter}) without full convergence.")
+    
     return vars
+
 
 
 def compute_gradient(objective_func, vars, args):
