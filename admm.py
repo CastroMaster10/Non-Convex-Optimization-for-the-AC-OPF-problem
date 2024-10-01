@@ -206,27 +206,49 @@ def admm_algorithm(x_m_init, network_data, rho=1.0, max_iter=100, tol=1e-4):
 def define_variable_bounds(bus_index, neighbors, network_data):
     """
     Defines bounds for the optimization variables for a given bus.
+
+    Parameters:
+    - bus_index: Index of the bus.
+    - neighbors: List of neighboring bus indices.
+    - network_data: Dictionary containing network data.
+
+    Returns:
+    - bounds: List of tuples specifying (min, max) bounds for each variable.
     """
-    # You need to define the bounds based on generator limits, voltage limits, etc.
-    # For example:
-    gen_limits = network_data['gen_limits'][bus_index]
+    gen_limits = network_data['gen_limits'].get(bus_index, [])
     voltage_limits = network_data['voltage_limits'][bus_index]
     
-    # Number of variables: 4 + 2 * number of neighbors
-    num_vars = 4 + 2 * len(neighbors)
-    
     bounds = []
-    # Bounds for PG_i
-    bounds.append((gen_limits['PG_min'], gen_limits['PG_max']))
-    # Bounds for QG_i
-    bounds.append((gen_limits['QG_min'], gen_limits['QG_max']))
+    
+    if gen_limits:
+        # Assuming one generator per bus; modify if multiple generators exist
+        # If multiple generators, you need to handle each one separately
+        PG_min = gen_limits[0]['PG_min']
+        PG_max = gen_limits[0]['PG_max']
+        bounds.append((PG_min, PG_max))
+    
+        QG_min = gen_limits[0]['QG_min']
+        QG_max = gen_limits[0]['QG_max']
+        bounds.append((QG_min, QG_max))
+    else:
+        # No generator at this bus
+        bounds.append((0.0, 0.0))  # PG_i
+        bounds.append((0.0, 0.0))  # QG_i
+    
     # Bounds for V_i
-    bounds.append((voltage_limits['V_min'], voltage_limits['V_max']))
-    # Bounds for theta_i (can be unbounded or within [-pi, pi])
-    bounds.append((-np.pi, np.pi))
+    V_min = voltage_limits['V_min']
+    V_max = voltage_limits['V_max']
+    bounds.append((V_min, V_max))
+    
+    # Bounds for theta_i (typically between -pi and pi)
+    theta_min = -np.pi
+    theta_max = np.pi
+    bounds.append((theta_min, theta_max))
+    
     # Bounds for Pij_i and Qij_i
     for _ in range(2 * len(neighbors)):
-        bounds.append((None, None))  # No specific bounds
+        bounds.append((None, None))  # No specific bounds; adjust as needed
+    
     return bounds
 
 
@@ -321,9 +343,7 @@ def compute_gradient(objective_func, vars, args):
     grad = np.zeros_like(vars)
 
     # Extract necessary data from args
-    a_i = args['gen_cost']['a']
-    b_i = args['gen_cost']['b']
-    c_i = args['gen_cost']['c']
+    gen_cost = args['gen_cost']
     lambda_Pij = args['lambda_Pij']
     lambda_Qij = args['lambda_Qij']
     z_Pij = args['z_Pij']
@@ -331,7 +351,17 @@ def compute_gradient(objective_func, vars, args):
     rho = args['rho']
 
     # Gradient w.r.t. PG_i
-    grad[0] = 2 * a_i * PG_i + b_i
+    if isinstance(gen_cost, list):
+        # Multiple generators at this bus
+        grad_PG = 0
+        for gc in gen_cost:
+            grad_PG += 2 * gc['a'] * PG_i + gc['b']
+        grad[0] = grad_PG
+    else:
+        # Single generator
+        a_i = gen_cost['a']
+        b_i = gen_cost['b']
+        grad[0] = 2 * a_i * PG_i + b_i
 
     # Gradient w.r.t. QG_i
     # Assuming no cost term involving QG_i
@@ -350,6 +380,7 @@ def compute_gradient(objective_func, vars, args):
         grad[4 + num_neighbors + idx] = lambda_Qij[idx] + rho * (Qij_i[idx] - z_Qij[idx])
 
     return grad
+
 
 
 
