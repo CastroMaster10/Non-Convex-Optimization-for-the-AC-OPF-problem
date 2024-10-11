@@ -96,19 +96,17 @@ class ACOPF_Problem:
         for j in range(X_int.shape[1]): 
 
             bus_idx_j = x_int[j]
-            if bus_idx_j != bus_idx_i:
-                ej = X_int[2,j]
-                fj = X_int[3,j]
-                cons1 += self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            ej = X_int[2,j]
+            fj = X_int[3,j]
+            cons1 += self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            
 
         #Boundary Buses
         for j in range(X_bound.shape[1]): 
             bus_idx_j = x_bound[j]
-
-            if bus_idx_j != bus_idx_i:
-                ej = X_bound[0,j]
-                fj = X_bound[1,j]
-                cons1 += self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)    
+            ej = X_bound[0,j]
+            fj = X_bound[1,j]
+            cons1 += self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)    
 
 
         #reactive power constraint
@@ -119,18 +117,14 @@ class ACOPF_Problem:
             bus_idx_j = x_int[j]
             ej = X_int[2,j]
             fj = X_int[3,j]
-
-            if bus_idx_j != bus_idx_i:
-                cons2 += -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            cons2 += -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
 
         #Boundary Buses
         for j in range(X_bound.shape[1]): 
             bus_idx_j = x_bound[j]
             ej = X_bound[0,j]
             fj = X_bound[1,j]
-
-            if bus_idx_j != bus_idx_i:
-                cons2 += -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            cons2 += -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
 
 
         return cons1,cons2
@@ -166,22 +160,20 @@ class ACOPF_Problem:
         for j in range(X_int.shape[1]):
 
             bus_idx_j = x_int[j]
-            if bus_idx_i != bus_idx_j: 
-                ej = X_int[2,j]
-                fj = X_int[3,j]
-                pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-                qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-                cons3 +=   pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
+            ej = X_int[2,j]
+            fj = X_int[3,j]
+            pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            cons3 +=   pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
         
         cons4 = 0
         for j in range(X_bound.shape[1]):
             bus_idx_j = x_bound[j]
-            if bus_idx_i != bus_idx_j: 
-                ej = X_bound[0,j]
-                fj = X_bound[1,j]
-                pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-                qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-                cons4 +=   pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
+            ej = X_bound[0,j]
+            fj = X_bound[1,j]
+            pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            cons4 +=   pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
 
         
         return cons3,cons4
