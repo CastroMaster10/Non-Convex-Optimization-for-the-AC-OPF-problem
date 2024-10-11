@@ -25,8 +25,7 @@ class ACOPF_Problem:
 
         
         pg = x[:len(x_int)]
-        mask = jnp.isin(self.net['gencost'][:,0],x_int) 
-        gencost_data_r = self.net['gencost'][mask][:,4:]
+        gencost_data_r = self.net['gencost'][x_int, :][:,4:]
 
         a = gencost_data_r[:,0]
         b = gencost_data_r[:,1]
@@ -58,11 +57,11 @@ class ACOPF_Problem:
         X_int = x[:len(x_int) * 4].reshape((4,-1))
         X_bound = x[len(x_int) * 4:].reshape((2,-1))
 
-        mask = jnp.isin(self.net['bus'][:,0],x_int) 
-        pd_int = self.net['bus'][mask][:,2]
+        #mask = jnp.isin(self.net['bus'][:,0],x_int) 
+        pd_int = self.net['bus'][x_int, :][:,2]
 
-        mask = jnp.isin(self.net['bus'][:,0],x_int) 
-        qd_int = self.net['bus'][mask][:,3]
+        #mask = jnp.isin(self.net['bus'][:,0],x_int) 
+        qd_int = self.net['bus'][x_int, :][:,3]
 
 
         cons1 =  0
