@@ -3,6 +3,10 @@ Algorithmic Differentiation
 """
 
 from jax import config
+import jax.numpy as np
+from jax import jit,grad,jacfwd,jacrev
+from cyipopt import minimize_ipopt
+
 
 #Enable 64 bit floating point precision
 
@@ -11,10 +15,26 @@ config.update("jax_enable_x64",True)
 #Use the CPU instead of GPU and mute all warnings if no GPU/TPU is found
 config.update("jax_platform_name",'cpu')
 
-import jax.numpy as np
-from jax import jit,grad,jacfwd,jacrev
-from cyipopt import minimize_ipopt
 
+#Using a class class
+
+class OptimizationProblem:
+
+    def __init__(self):
+        pass
+
+    def objective(self,x):
+        return x[0]*x[3]*np.sum(x[:3]) + x[2]
+    
+
+    def eq_constraints(self,x):
+        return np.sum(x**2) - 40
+    
+
+    def ineq_constrains(self,x):
+        return np.prod(x) - 25  
+
+"""
 def objective(x):
     return x[0]*x[3]*np.sum(x[:3]) + x[2]
 
@@ -23,12 +43,14 @@ def eq_constraints(x):
 
 def ineq_constrains(x):
     return np.prod(x) - 25
+"""
 
 #jit (just-in-time) functions
+problem = OptimizationProblem()
 
-obj_jit = jit(objective)
-con_eq_jit = jit(eq_constraints)
-con_ineq_jit = jit(ineq_constrains)
+obj_jit = jit(problem.objective)
+con_eq_jit = jit(problem.eq_constraints)
+con_ineq_jit = jit(problem.ineq_constrains)
 
 #build the derivatives and jit them
 
