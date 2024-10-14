@@ -139,19 +139,31 @@ class ACOPF_Problem:
 
         cons3 = 0
         cons4 = 0
+        cons5 = 0
+        cons6 = 0
+
+        #voltage limits
+        Vmax = self.net['gen'][:,11]
+        Vmin = self.net['gen'][:,12]
 
         for i in range(X_int.shape[1]):
             bus_idx_i = x_int[i]
             ei = X_int[2,i]
             fi = X_int[3,i]
-
             cons3_i,cons4_i = self.thermal_limit_buses(X_int,X_bound,ei,fi,x_int,x_bound,bus_idx_i)
-            
             cons3 += cons3_i 
             cons4 += cons4_i 
+            cons5 +=  Vmin[bus_idx_i] ** 2 -(ei ** 2)  - (fi ** 2)
+            cons6 +=   ei ** 2  + fi ** 2 - (Vmax[bus_idx_i] ** 2)
+        
+
+
 
         
-        return jnp.array([cons3,cons4])
+
+
+
+        return jnp.array([cons3,cons4,cons5,cons6])
 
     def thermal_limit_buses(self,X_int,X_bound,ei,fi,x_int,x_bound,bus_idx_i):
 
