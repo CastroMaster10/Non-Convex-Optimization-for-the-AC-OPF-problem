@@ -1,8 +1,8 @@
 import jax.numpy as jnp
 
-class ACOPF_Problem:
+class LocalUpdate_ACOPF:
 
-    def __init__(self,net,regions,region,G,B,S,xbar,rho):
+    def __init__(self,net,regions,region,G,B,S,xbar,rho,alpha,idx_xbar_r):
         #Transform each data structure of the net into jax numpy
         for key,matrix in net.items():
             net[key] = jnp.array(matrix)
@@ -13,7 +13,9 @@ class ACOPF_Problem:
         self.B = jnp.array(B)
         self.S = jnp.array(S)
         self.xbar = xbar
-        self.rho = rho  
+        self.rho = rho
+        self.alpha = alpha
+        self.idx_xbar_r =  idx_xbar_r
     
         
     
@@ -21,8 +23,11 @@ class ACOPF_Problem:
         "Objective function"
         x_int = jnp.array(list(self.regions[self.region][0]))
         x_bound = jnp.array(list(self.regions[self.region][1]))
-        alpha = jnp.ones((1,len(x_bound) * 2))
 
+        alpha_e_r = self.alpha[:len(self.alpha) // 2][self.idx_xbar_r: self.idx_xbar_r + len(x_bound)]
+        alpha_j_r = self.alpha[len(self.alpha) // 2:][self.idx_xbar_r:self.idx_xbar_r + len(x_bound)]
+        
+        alpha_r = jnp.concatenate([alpha_e_r,alpha_j_r])
         
         pg = x[:len(x_int)]
         gencost_data_r = self.net['gencost'][x_int, :][:,4:]
@@ -36,18 +41,19 @@ class ACOPF_Problem:
         for i in range(len(x_int)):
             total_c += a[i] *  pg[i] ** 2 + b[i] * pg[i] + c[i]
         
+        e_jbar_r = self.xbar[:len(self.xbar) // 2][self.idx_xbar_r:self.idx_xbar_r + len(x_bound)]
+        f_jbar_r = self.xbar[len(self.xbar) // 2:][self.idx_xbar_r:self.idx_xbar_r + len(x_bound)]
+        Br_xbar = jnp.concatenate([e_jbar_r,f_jbar_r])
+        #<lambda^k,A_r * x^r - B_r * \bar{x}>
+        Ax_jr = x[4 * len(x_int):]
+        consensus = Ax_jr -  Br_xbar
 
-        #<lambda^k,A_r * x^r>
-        x_jr = x[4 * len(x_int):]
-        alpha_Ax_r = jnp.dot(alpha,x_jr)
-
-
-        #rho * ||A_r * x^r + B_r * \bar{x}^k||^2
-        consensus = x[4 * len(x_int):] - self.xbar[4 * len(x_int)]
+        alpha_Ax_r = jnp.dot(alpha_r,consensus)
+    
         penalty = 1/2 * self.rho * jnp.linalg.norm(consensus)
 
         return jnp.sum(total_c + alpha_Ax_r + penalty)
-
+    
     def eq_constraints(self,x):
         "Equality constraints"
 
