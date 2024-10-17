@@ -1,8 +1,10 @@
 import jax.numpy as jnp
+import numpy as np
 
 class LocalUpdate_ACOPF:
 
-    def __init__(self,net,regions,region,G,B,S,xbar,rho,alpha,idx_xbar_r):
+    def __init__(self,net,regions,region,G,B,S,xbar,rho,alpha,idx_buses_before,idx_buses_after):
+
         #Transform each data structure of the net into jax numpy
         for key,matrix in net.items():
             net[key] = jnp.array(matrix)
@@ -15,19 +17,20 @@ class LocalUpdate_ACOPF:
         self.xbar = xbar
         self.rho = rho
         self.alpha = alpha
-        self.idx_xbar_r =  idx_xbar_r
+        self.idx_buses_before = idx_buses_before
+        self.idx_buses_after = idx_buses_after
     
         
     
     def objective(self,x):
-        "Objective function"
+        "Local Objective function"
         x_int = jnp.array(list(self.regions[self.region][0]))
         x_bound = jnp.array(list(self.regions[self.region][1]))
-
-        alpha_e_r = self.alpha[:len(self.alpha) // 2][self.idx_xbar_r: self.idx_xbar_r + len(x_bound)]
-        alpha_j_r = self.alpha[len(self.alpha) // 2:][self.idx_xbar_r:self.idx_xbar_r + len(x_bound)]
-        
-        alpha_r = jnp.concatenate([alpha_e_r,alpha_j_r])
+               
+        #X_int = x.reshape((4,-1))[:,x_int]
+        #X_bound = x.reshape((4,-1))[:,x_bound][2:,:]
+        X_int = x[:len(x_int) * 4].reshape((4,-1))
+        X_bound = x[len(x_int) * 4:].reshape((2,-1))        
         
         pg = x[:len(x_int)]
         gencost_data_r = self.net['gencost'][x_int, :][:,4:]
@@ -35,21 +38,28 @@ class LocalUpdate_ACOPF:
         a = gencost_data_r[:,0]
         b = gencost_data_r[:,1]
         c = gencost_data_r[:,2]
-        
+            
         #c_r(x)
         total_c = 0
         for i in range(len(x_int)):
             total_c += a[i] *  pg[i] ** 2 + b[i] * pg[i] + c[i]
-        
-        e_jbar_r = self.xbar[:len(self.xbar) // 2][self.idx_xbar_r:self.idx_xbar_r + len(x_bound)]
-        f_jbar_r = self.xbar[len(self.xbar) // 2:][self.idx_xbar_r:self.idx_xbar_r + len(x_bound)]
-        Br_xbar = jnp.concatenate([e_jbar_r,f_jbar_r])
-        #<lambda^k,A_r * x^r - B_r * \bar{x}>
-        Ax_jr = x[4 * len(x_int):]
-        consensus = Ax_jr -  Br_xbar
 
-        alpha_Ax_r = jnp.dot(alpha_r,consensus)
-    
+        
+        X_bound_v = X_bound.reshape(-1)
+        X_bound_v_e = X_bound_v[:len(x_bound)]
+        X_bound_v_f = X_bound_v[len(x_bound):]
+
+
+
+        Ar_xr_e = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_e,jnp.zeros(self.idx_buses_after)])
+        Ar_xr_f = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_f,jnp.zeros(self.idx_buses_after)])
+
+
+        Ar_xr = jnp.concatenate([Ar_xr_e,Ar_xr_f])
+        #Arx^r -  xbar
+        consensus = Ar_xr - self.xbar
+        #penalty
+        alpha_Ax_r = jnp.dot(self.alpha,consensus)
         penalty = 1/2 * self.rho * jnp.linalg.norm(consensus)
 
         return jnp.sum(total_c + alpha_Ax_r + penalty)
@@ -60,8 +70,12 @@ class LocalUpdate_ACOPF:
         x_int = jnp.array(list(self.regions[self.region][0]))
         x_bound = jnp.array(list(self.regions[self.region][1]))
 
+        #X_int = x.reshape((4,-1))[:,x_int]
+        #X_bound = x.reshape((4,-1))[:,x_bound][2:,:]
+
         X_int = x[:len(x_int) * 4].reshape((4,-1))
         X_bound = x[len(x_int) * 4:].reshape((2,-1))
+
 
         #mask = jnp.isin(self.net['bus'][:,0],x_int) 
         pd_int = self.net['bus'][x_int, :][:,2]
@@ -70,8 +84,8 @@ class LocalUpdate_ACOPF:
         qd_int = self.net['bus'][x_int, :][:,3]
 
 
-        cons1 =  0
-        cons2 =  0
+        cons1 =  []
+        cons2 =  []
 
         #start with calculating the cosntraints
         for i in range(X_int.shape[1]):
@@ -86,11 +100,13 @@ class LocalUpdate_ACOPF:
 
             cons1_i,cons2_i = self.power_balance_constraints(X_int,X_bound,pd_i,qd_i,pg_i,qg_i,ei,fi,bus_idx_i,x_int,x_bound)
 
-            cons1 += cons1_i
-            cons2 += cons2_i
-        
+            #cons1 += cons1_i
+            #cons2 += cons2_i
+            cons1.append(cons1_i)
+            cons2.append(cons2_i)
 
-        return jnp.array([cons1,cons2])
+
+        return jnp.concatenate([jnp.array(cons1),jnp.array(cons2)])
 
     
     def power_balance_constraints(self,X_int,X_bound,pd_i,qd_i,pg_i,qg_i,ei,fi,bus_idx_i,x_int,x_bound):
@@ -140,13 +156,16 @@ class LocalUpdate_ACOPF:
         x_int = jnp.array(list(self.regions[self.region][0]))
         x_bound = jnp.array(list(self.regions[self.region][1]))
 
+        #X_int = x.reshape((4,-1))[:,x_int]
+        #X_bound = x.reshape((4,-1))[:,x_bound][2:,:]
+
         X_int = x[:len(x_int) * 4].reshape((4,-1))
         X_bound = x[len(x_int) * 4:].reshape((2,-1))
 
-        cons3 = 0
-        cons4 = 0
-        cons5 = 0
-        cons6 = 0
+        cons3 = []
+        cons4 = []
+        cons5 = []
+        cons6 = []
 
         #voltage limits
         Vmax = self.net['gen'][:,11]
@@ -157,11 +176,14 @@ class LocalUpdate_ACOPF:
             ei = X_int[2,i]
             fi = X_int[3,i]
             cons3_i,cons4_i = self.thermal_limit_buses(X_int,X_bound,ei,fi,x_int,x_bound,bus_idx_i)
-            cons3 += cons3_i 
-            cons4 += cons4_i 
-            cons5 +=  Vmin[bus_idx_i] ** 2 -(ei ** 2)  - (fi ** 2)
-            cons6 +=   ei ** 2  + fi ** 2 - (Vmax[bus_idx_i] ** 2)
-        
+            #cons3 += cons3_i 
+            #cons4 += cons4_i 
+            #cons5 +=  Vmin[bus_idx_i] ** 2 -(ei ** 2)  - (fi ** 2)
+            #cons6 +=   ei ** 2  + fi ** 2 - (Vmax[bus_idx_i] ** 2)
+            cons3.append(cons3_i)
+            cons4.append(cons4_i)
+            cons5.append(Vmin[bus_idx_i] ** 2 -(ei ** 2)  - (fi ** 2))
+            cons6.append(ei ** 2  + fi ** 2 - (Vmax[bus_idx_i] ** 2))
 
 
 
@@ -169,7 +191,7 @@ class LocalUpdate_ACOPF:
 
 
 
-        return jnp.array([cons3,cons4,cons5,cons6])
+        return jnp.concatenate([jnp.array(cons3),jnp.array(cons4),jnp.array(cons5),jnp.array(cons6)])
 
     def thermal_limit_buses(self,X_int,X_bound,ei,fi,x_int,x_bound,bus_idx_i):
 
