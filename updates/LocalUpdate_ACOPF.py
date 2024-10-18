@@ -19,7 +19,7 @@ class LocalUpdate_ACOPF:
         self.alpha = alpha
         self.idx_buses_before = idx_buses_before
         self.idx_buses_after = idx_buses_after
-    
+        self.lr  = 0.1
         
     
     def objective(self,x):
@@ -116,7 +116,7 @@ class LocalUpdate_ACOPF:
 
         #Interior buses
         for j in range(X_int.shape[1]): 
-
+            
             bus_idx_j = x_int[j]
             ej = X_int[2,j]
             fj = X_int[3,j]
@@ -168,8 +168,8 @@ class LocalUpdate_ACOPF:
         cons6 = []
 
         #voltage limits
-        Vmax = self.net['gen'][:,11]
-        Vmin = self.net['gen'][:,12]
+        Vmax = self.net['bus'][:,11]
+        Vmin = self.net['bus'][:,12]
 
         for i in range(X_int.shape[1]):
             bus_idx_i = x_int[i]
@@ -198,7 +198,6 @@ class LocalUpdate_ACOPF:
 
         cons3 = 0
         for j in range(X_int.shape[1]):
-
             bus_idx_j = x_int[j]
             ej = X_int[2,j]
             fj = X_int[3,j]
