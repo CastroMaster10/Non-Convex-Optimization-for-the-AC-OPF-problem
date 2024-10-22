@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
+import jax
 
 class LocalUpdate_ACOPF:
 
@@ -19,7 +20,6 @@ class LocalUpdate_ACOPF:
         self.alpha = alpha
         self.idx_buses_before = idx_buses_before
         self.idx_buses_after = idx_buses_after
-        self.lr  = 0.1
         
     
     def objective(self,x):
@@ -70,17 +70,11 @@ class LocalUpdate_ACOPF:
         x_int = jnp.array(list(self.regions[self.region][0]))
         x_bound = jnp.array(list(self.regions[self.region][1]))
 
-        #X_int = x.reshape((4,-1))[:,x_int]
-        #X_bound = x.reshape((4,-1))[:,x_bound][2:,:]
-
         X_int = x[:len(x_int) * 4].reshape((4,-1))
         X_bound = x[len(x_int) * 4:].reshape((2,-1))
 
 
-        #mask = jnp.isin(self.net['bus'][:,0],x_int) 
         pd_int = self.net['bus'][x_int, :][:,2]
-
-        #mask = jnp.isin(self.net['bus'][:,0],x_int) 
         qd_int = self.net['bus'][x_int, :][:,3]
 
 
@@ -108,11 +102,12 @@ class LocalUpdate_ACOPF:
 
         return jnp.concatenate([jnp.array(cons1),jnp.array(cons2)])
 
-    
-    def power_balance_constraints(self,X_int,X_bound,pd_i,qd_i,pg_i,qg_i,ei,fi,bus_idx_i,x_int,x_bound):
         
+    def power_balance_constraints(self,X_int,X_bound,pd_i,qd_i,pg_i,qg_i,ei,fi,bus_idx_i,x_int,x_bound):
+
         #active power constraint
-        cons1 = self.G[bus_idx_i][bus_idx_i] * (ei ** 2 + fi ** 2) - pg_i + pd_i
+        cons1 = jnp.array(self.G[bus_idx_i][bus_idx_i] * (ei ** 2 + fi ** 2) - pg_i + pd_i,dtype=jnp.float32)
+        #print(cons1)
 
         #Interior buses
         for j in range(X_int.shape[1]): 
@@ -120,33 +115,68 @@ class LocalUpdate_ACOPF:
             bus_idx_j = x_int[j]
             ej = X_int[2,j]
             fj = X_int[3,j]
-            cons1 += self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-            
+
+            def sum_interior_buses_True(cons1): 
+                delta = self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                return cons1 + jnp.array(delta,dtype=jnp.float32)
+
+            def sum_interior_buses_False(cons1):
+                return cons1
+
+            cons1 = jax.lax.cond(bus_idx_i != bus_idx_j,sum_interior_buses_True,sum_interior_buses_False,cons1)
+
+                
 
         #Boundary Buses
-        for j in range(X_bound.shape[1]): 
+        for j in range(X_bound.shape[1]):
             bus_idx_j = x_bound[j]
             ej = X_bound[0,j]
             fj = X_bound[1,j]
-            cons1 += self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)    
+
+            def sum_boundary_buses_True(cons1): 
+                delta = self.G[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                return cons1 + jnp.array(delta,dtype=jnp.float32)
+
+            def sum_boundary_buses_False(cons1):
+                return cons1
+
+            cons1 = jax.lax.cond(bus_idx_i != bus_idx_j,sum_boundary_buses_True,sum_boundary_buses_False,cons1)
 
 
         #reactive power constraint
-        cons2 = -self.B[bus_idx_i][bus_idx_i] * (ei ** 2 + fi ** 2) - qg_i + qd_i
-
+        cons2 = jnp.array(-self.B[bus_idx_i][bus_idx_i] * (ei ** 2 + fi ** 2) - qg_i + qd_i,dtype=jnp.float32)
+        #print(type(cons2))
         #Interior buses
-        for j in range(X_int.shape[1]): 
+        for j in range(X_int.shape[1]):
             bus_idx_j = x_int[j]
             ej = X_int[2,j]
             fj = X_int[3,j]
-            cons2 += -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            def sum_interior_buses_True(cons2): 
+                delta = -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) -self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                return cons2 + jnp.array(delta,dtype=jnp.float32)
+
+            def sum_interior_buses_False(cons2):
+                return cons2
+
+        
+            cons2 = jax.lax.cond(bus_idx_i != bus_idx_j,sum_interior_buses_True,sum_interior_buses_False,cons2) 
+
 
         #Boundary Buses
-        for j in range(X_bound.shape[1]): 
+        for j in range(X_bound.shape[1]):
+            
             bus_idx_j = x_bound[j]
             ej = X_bound[0,j]
             fj = X_bound[1,j]
-            cons2 += -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+            def sum_boundary_buses_True(cons2): 
+                delta = -self.B[bus_idx_i][bus_idx_j] * (ei * ej + fi * fj) -self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                return cons2 + jnp.array(delta,dtype=jnp.float32)
+
+            def sum_boundary_buses_False(cons2):
+                return cons2
+
+        
+            cons2 = jax.lax.cond(bus_idx_i != bus_idx_j,sum_boundary_buses_True,sum_boundary_buses_False,cons2) 
 
 
         return cons1,cons2
@@ -187,33 +217,53 @@ class LocalUpdate_ACOPF:
 
 
 
-        
-
-
 
         return jnp.concatenate([jnp.array(cons3),jnp.array(cons4),jnp.array(cons5),jnp.array(cons6)])
 
     def thermal_limit_buses(self,X_int,X_bound,ei,fi,x_int,x_bound,bus_idx_i):
 
 
-        cons3 = 0
+        cons3 = jnp.array(0.0, dtype=jnp.float32)  # or dtype=jnp.float64
+        #print(type(cons3))
         for j in range(X_int.shape[1]):
             bus_idx_j = x_int[j]
-            ej = X_int[2,j]
+            ej = X_int[2,j] 
             fj = X_int[3,j]
-            pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-            qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-            cons3 +=   pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
-        
-        cons4 = 0
+
+            def sum_interior_buses_True(cons3):
+                pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                delta = pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
+                return cons3 + jnp.array(delta,dtype=jnp.float32)
+            
+            
+            def sum_interior_buses_False(cons3):
+                return cons3
+            
+            cons3 = jax.lax.cond(bus_idx_i != bus_idx_j,sum_interior_buses_True,sum_interior_buses_False,cons3) 
+            
+            
+        cons4 = jnp.array(0.0, dtype=jnp.float32)
+        #print(type(cons4))
         for j in range(X_bound.shape[1]):
+            
             bus_idx_j = x_bound[j]
             ej = X_bound[0,j]
             fj = X_bound[1,j]
-            pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-            qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
-            cons4 +=   pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
 
+            def sum_boundary_buses_True(cons4):
+                pij = -self.G[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.B[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                qij =  self.B[bus_idx_i][bus_idx_j] * (ei ** 2 + fi ** 2 - ei * ej - fi * fj) - self.G[bus_idx_i][bus_idx_j] * (ei * fj - ej * fi)
+                delta = pij ** 2 + qij ** 2  -(self.S[bus_idx_i][bus_idx_j] ** 2)
+                return cons4 + jnp.array(delta,dtype=jnp.float32)
+            
+            
+            def sum_boundary_buses_False(cons4):
+                return cons4
+            
+            cons4 = jax.lax.cond(bus_idx_i != bus_idx_j,sum_boundary_buses_True,sum_boundary_buses_False,cons4) 
         
+
+            
         return cons3,cons4
 

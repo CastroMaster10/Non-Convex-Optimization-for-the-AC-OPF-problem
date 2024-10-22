@@ -11,7 +11,6 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha_arr,x_r_arr,xbar,rho,bnds_a
     for _ in range(max_iter):
         #Local update
         xnew_r_arr = []
-        objective_f_before = 0
         objective_f_new = 0
         for idx,x_r in enumerate(x_r_arr):
 
@@ -21,17 +20,16 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha_arr,x_r_arr,xbar,rho,bnds_a
             bnds_r = bnds_arr[idx]  
 
             local_update_i = LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar,rho,alpha_r,idx_buses_before_regioni,idx_buses_after_regioni)
-            objective_f_before += local_update_i.objective(x_r)
             x_r_k = ipopt(local_update_i.objective,local_update_i.eq_constraints,local_update_i.ineq_constraints,x_r,bnds_r)
             objective_f_new += local_update_i.objective(x_r_k)
             xnew_r_arr.append(x_r_k)
 
-        print("\nObjective function before local update: ",objective_f_before)
-        print("Objective function after local update: ",objective_f_new)
+        print("\nObjective function after local update: ",objective_f_new)
         print("\n---------------------------------------------------------")
         #Global update
-        global_update = GlobalUpdate_ACOPF(net,regions,rho,xnew_r_arr,alpha_arr,idx_buses_arr)
-        new_xbar = global_update.update_xbar(xbar)
+        global_update_i = GlobalUpdate_ACOPF(net,regions,rho,xnew_r_arr,alpha_arr,idx_buses_arr)
+        #new_xbar = global_update.update_xbar(xbar)
+        new_xbar = ipopt(global_update_i.objective,global_update_i.eq_constraints,global_update_i.ineq_constraints,xbar,[])
         alpha_new_arr = []
 
         #Update Dual variable
