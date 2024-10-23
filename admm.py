@@ -18,6 +18,7 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,m
         #objective_f_new = 0
         eq_cons_violation = []
         ineq_cons_violation = []
+
         for idx,x_r in enumerate(x_r_arr):
 
             region = idx + 1
@@ -28,7 +29,7 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,m
             x_r_k = ipopt(local_update_i.objective,local_update_i.eq_constraints,local_update_i.ineq_constraints,x_r,bnds_r)
             #objective_f_new += local_update_i.objective(x_r_k)
             eq_cons_violation.append(jnp.sum(local_update_i.eq_constraints(x_r_k)))
-            ineq_cons_violation.append(jnp.sum(local_update_i.ineq_constraints(x_r_k)))
+            ineq_cons_violation.append((jnp.where(local_update_i.ineq_constraints(x_r_k) >= 0)[0].size,local_update_i.ineq_constraints(x_r_k).size))
             xnew_r_arr.append(x_r_k)
 
    
@@ -61,7 +62,7 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,m
             Ar_xr_arr.append(Ar_xr_k)
         
         Ar_xr_arr_new = jnp.sum(jnp.array(Ar_xr_arr),axis=0)
-        alpha_new +=  0.01 * (Ar_xr_arr_new -  new_xbar)
+        alpha_new +=  rho * (Ar_xr_arr_new -  new_xbar)
 
         #Generation cost
         generation_cost = 0
@@ -91,7 +92,7 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,m
         print(f'N. Iteration: {_}')
         print('\nConstraints violation for each region')
         for idx in range(len(eq_cons_violation)):
-            print(f'Region {idx + 1}\n \t-Equality constraints violation: {eq_cons_violation[idx]} \n \t-Inequality constraints violation: {ineq_cons_violation[idx]}')
+            print(f'Region {idx + 1}\n \t-Equality constraints violation: {eq_cons_violation[idx]} \n \t-Inequality constraints violation: {ineq_cons_violation[idx][0]} / {ineq_cons_violation[idx][1]}')
         print("\nInfeasibility ||Ax + Bx||: ",jnp.linalg.norm(Ar_xr_arr_new - new_xbar))
         print(f'\nGeneretation cost: {generation_cost}')
         print('\n----------------------------------------------------------------------')
