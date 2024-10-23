@@ -5,33 +5,40 @@ from ipopt2 import ipopt
 import jax.numpy as jnp
 
 
-def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha_arr,x_r_arr,xbar,rho,bnds_arr,max_iter):
+def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,max_iter):
+
+    
+    infi_arr = []
+    gcost_arr = []
 
 
     for _ in range(max_iter):
         #Local update
         xnew_r_arr = []
-        objective_f_new = 0
+        #objective_f_new = 0
+        eq_cons_violation = []
+        ineq_cons_violation = []
         for idx,x_r in enumerate(x_r_arr):
 
             region = idx + 1
             idx_buses_before_regioni,idx_buses_after_regioni = idx_buses_arr[region]
-            alpha_r = alpha_arr[idx]
             bnds_r = bnds_arr[idx]  
 
-            local_update_i = LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar,rho,alpha_r,idx_buses_before_regioni,idx_buses_after_regioni)
+            local_update_i = LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar,rho,alpha,idx_buses_before_regioni,idx_buses_after_regioni)
             x_r_k = ipopt(local_update_i.objective,local_update_i.eq_constraints,local_update_i.ineq_constraints,x_r,bnds_r)
-            objective_f_new += local_update_i.objective(x_r_k)
+            #objective_f_new += local_update_i.objective(x_r_k)
+            eq_cons_violation.append(jnp.sum(local_update_i.eq_constraints(x_r_k)))
+            ineq_cons_violation.append(jnp.sum(local_update_i.ineq_constraints(x_r_k)))
             xnew_r_arr.append(x_r_k)
 
-        print("\nObjective function after local update: ",objective_f_new)
-        print("\n---------------------------------------------------------")
+   
         #Global update
-        global_update_i = GlobalUpdate_ACOPF(net,regions,rho,xnew_r_arr,alpha_arr,idx_buses_arr)
+        global_update_i = GlobalUpdate_ACOPF(net,regions,rho,xnew_r_arr,alpha,idx_buses_arr)
         #new_xbar = global_update.update_xbar(xbar)
-        new_xbar = ipopt(global_update_i.objective,global_update_i.eq_constraints,global_update_i.ineq_constraints,xbar,[])
-        alpha_new_arr = []
-
+        #new_xbar = ipopt(global_update_i.objective,global_update_i.eq_constraints,global_update_i.ineq_constraints,xbar,[])
+        new_xbar = global_update_i.global_update()
+        alpha_new = alpha
+        Ar_xr_arr = []
         #Update Dual variable
         for idx,x_r in enumerate(xnew_r_arr):
             region = idx + 1
@@ -51,16 +58,61 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha_arr,x_r_arr,xbar,rho,bnds_a
             Ar_xr_f = jnp.concatenate([jnp.zeros(idx_buses_before_regioni),X_bound_v_f,jnp.zeros(idx_buses_after_regioni)])
 
             Ar_xr_k = jnp.concatenate([Ar_xr_e,Ar_xr_f])
-            alpha_new_arr.append(alpha_arr[idx] + rho * (Ar_xr_k -  new_xbar))
+            Ar_xr_arr.append(Ar_xr_k)
         
+        Ar_xr_arr_new = jnp.sum(jnp.array(Ar_xr_arr),axis=0)
+        alpha_new +=  0.01 * (Ar_xr_arr_new -  new_xbar)
+
+        #Generation cost
+        generation_cost = 0
+        for idx,x_r in enumerate(xnew_r_arr):
+            region = idx + 1
+            #generation_cost_i = generation_cost(x_r,net,regions,region)
+            #generation_cost += generation_cost_i
+            x_int = jnp.array(list(regions[region][0])) #Interior buses
+            x_bound = jnp.array(list(regions[region][1])) #Boundary buses
+            
+                            
+            pg = x_r[:len(x_int)]
+            gencost_data_r = net['gencost'][x_int, :][:,4:]
+
+            a = gencost_data_r[:,0]
+            b = gencost_data_r[:,1]
+            c = gencost_data_r[:,2]
+                    
+            #c_r(x)
+            total_c = 0
+            for i in range(len(x_int)):
+                total_c += a[i] *  pg[i] ** 2 + b[i] * pg[i] + c[i]
+            
+            generation_cost += total_c
+
+
+        print(f'N. Iteration: {_}')
+        print('\nConstraints violation for each region')
+        for idx in range(len(eq_cons_violation)):
+            print(f'Region {idx + 1}\n \t-Equality constraints violation: {eq_cons_violation[idx]} \n \t-Inequality constraints violation: {ineq_cons_violation[idx]}')
+        print("\nInfeasibility ||Ax + Bx||: ",jnp.linalg.norm(Ar_xr_arr_new - new_xbar))
+        print(f'\nGeneretation cost: {generation_cost}')
+        print('\n----------------------------------------------------------------------')
         
         x_r_arr = xnew_r_arr
         xbar = new_xbar
-        alpha_arr = jnp.array(alpha_new_arr)
+        alpha = alpha_new
+
+        #Add values
+        infi_arr.append(jnp.linalg.norm(Ar_xr_arr_new - new_xbar))
+        gcost_arr.append(generation_cost)
 
 
-    
+
+    return  {
+        "x_r":xnew_r_arr, 
+        "xbar":new_xbar, 
+        "alpha":alpha,
+        "infeasibility_arr": infi_arr,
+        "generation_cost": gcost_arr
+        }
 
 
 
-    return  xnew_r_arr, new_xbar, alpha_arr

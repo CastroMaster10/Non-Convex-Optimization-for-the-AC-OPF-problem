@@ -60,7 +60,7 @@ class LocalUpdate_ACOPF:
         consensus = Ar_xr - self.xbar
         #penalty
         alpha_Ax_r = jnp.dot(self.alpha,consensus)
-        penalty = 1/2 * self.rho * jnp.linalg.norm(consensus)
+        penalty =  self.rho /2 * jnp.linalg.norm(consensus)
 
         return jnp.sum(total_c + alpha_Ax_r + penalty)
     

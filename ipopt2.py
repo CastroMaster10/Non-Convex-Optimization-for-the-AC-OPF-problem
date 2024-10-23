@@ -52,28 +52,28 @@ def ipopt(objective,con_eq_jit,con_ineq_jit,x0,bnds):
     if bnds:
         #Executing the solver
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
-                'disp':5,
-                'tol': 1e-6,
-                'max_iter': 10000,
-                'linear_solver': 'mumps',
-                'hessian_approximation': 'limited-memory',
-                'mu_init': 1e-3,
-                'constr_viol_tol': 1e-6,
-                'obj_scaling_factor': 1e-4,
-                'nlp_scaling_method': 'gradient-based',
-                'mu_strategy': 'adaptive',
-                'acceptable_tol': 1e-2,
+            'disp':5,
+            'tol': 1e-6,
+            'max_iter': 10000,
+            'linear_solver': 'mumps',
+            'hessian_approximation': 'limited-memory',
+            'mu_init': 1e-3,
+            'constr_viol_tol': 1e-6,
+            'obj_scaling_factor': 1e-4,
+            'nlp_scaling_method': 'gradient-based',
+            'mu_strategy': 'adaptive',
+            'acceptable_tol': 1e-8,
             })
     else:
         #Executing the solver
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,options={
                 'disp':5,
                 'tol': 1e-6,
-                'max_iter': 10000,
+                'max_iter': 3000,
                 'linear_solver': 'mumps',
                 'hessian_approximation': 'limited-memory',
                 'mu_init': 1e-3,
-                'constr_viol_tol': 1e-6,
+                'constr_viol_tol': 1e-20,
                 'obj_scaling_factor': 1e-4,
                 'nlp_scaling_method': 'gradient-based',
                 'mu_strategy': 'adaptive',
