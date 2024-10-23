@@ -54,15 +54,15 @@ def ipopt(objective,con_eq_jit,con_ineq_jit,x0,bnds):
     res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
             'disp':5,
             'tol': 1e-6,
-            'max_iter': 10000,
+            'max_iter': 5000,
             'linear_solver': 'mumps',
             'hessian_approximation': 'limited-memory',
-            'mu_init': 1e-10,
-            'constr_viol_tol': 1e-6,
-            'obj_scaling_factor': 1e-6,
+            'mu_init': 1e-4,
+            'constr_viol_tol': 1e-15,
+            'obj_scaling_factor': 1e-4,
             'nlp_scaling_method': 'gradient-based',
             'mu_strategy': 'adaptive',
-            'acceptable_tol': 1e-2,
+            'acceptable_tol': 1e-6,
         })
     
     
