@@ -8,7 +8,7 @@ def read_matpower_powergrid(dir_file):
     # Add path
     eng.addpath(dir_file, nargout=0)
     # Load the MATPOWER case
-    mpc = eng.pglib_opf_case5_pjm(nargout=1)
+    mpc = eng.pglib_opf_case30_ieee(nargout=1)
     #mpc = ext2int(mpc)
     # Convert to internal indexing to get 'order' field
     base_mva = mpc["baseMVA"]
