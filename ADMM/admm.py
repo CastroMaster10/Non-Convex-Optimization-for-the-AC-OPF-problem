@@ -1,8 +1,7 @@
-
-from updates.LocalUpdate_ACOPF import LocalUpdate_ACOPF
-from updates.GlobalUpdate_ACOPF import GlobalUpdate_ACOPF
-from ipopt2 import ipopt
 import jax.numpy as jnp
+from .ipopt2 import ipopt
+from .GlobalUpdate_ACOPF import GlobalUpdate_ACOPF
+from .LocalUpdate_ACOPF import LocalUpdate_ACOPF
 
 
 def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,max_iter):
@@ -116,4 +115,4 @@ def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,m
         }
 
 
-
+    
