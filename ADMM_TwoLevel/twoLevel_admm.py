@@ -1,5 +1,6 @@
 
 import jax.numpy as jnp
+import numpy as np
 from .ipopt2 import ipopt
 from .LocalUpdate_twoLevel_ACOPF import LocalUpdate_ACOPF
 from .GlobalUpdate_twoLevel_ACOPF import GlobalUpdate_ACOPF
@@ -18,9 +19,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,x_r_arr0,xbar0,idx_buses_arr,bnds_arr,
     x_r_arr = x_r_arr0
     xj_arr = get_xj_arr(x_r_arr0,regions,idx_buses_arr)
         
-    z = jnp.zeros(d) #Slack variable
-    y = -alpha
-       
+
     xbar = xbar0
     gcost_arr = []
     infeasibility_arr = []
@@ -30,10 +29,13 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,x_r_arr0,xbar0,idx_buses_arr,bnds_arr,
         Inner Loop
         """
         #Initialize values for Inner Loop
-        x_r_arr = x_r_arr0
-        xj_arr = get_xj_arr(x_r_arr0,regions,idx_buses_arr)
-        xbar = xbar0
+        #x_r_arr = x_r_arr0
+        xj_arr = get_xj_arr(x_r_arr,regions,idx_buses_arr)
+        #xbar = xbar0
         rho = 2 * beta
+        y = jnp.array(np.random.random(d)) #Dual variable
+        z = (-alpha - y) /  beta  #Slack Variable
+
         t = 0
 
         while jnp.linalg.norm(xj_arr - xbar + z) >= (jnp.sqrt(d) / 2500 * k) or t < 20:
@@ -89,6 +91,10 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,x_r_arr0,xbar0,idx_buses_arr,bnds_arr,
                 z = z_new
             
             t += 1
+            print(jnp.sum(z))
+            
+        
+
         
         print(f'N. Iteration for Outer Loop: {k}')
         print(f'Number of iterationns for inner loop: {t}')
@@ -102,6 +108,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,x_r_arr0,xbar0,idx_buses_arr,bnds_arr,
 
         infeasibility_arr.append(jnp.linalg.norm(xj_arr - xbar))
         gcost_arr.append(objective(x_r_arr,net,regions))
+    
         
         #Update outer dual variables
         if jnp.linalg.norm(z) <= 1e-8:
