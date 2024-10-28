@@ -7,10 +7,10 @@ from cyipopt import minimize_ipopt
 #Enable 64 bit floating point precision
 config.update("jax_enable_x64",True)
 #Use the CPU instead of GPU and mute all warnings if no GPU/TPU is found
-config.update("jax_platform_name",'cpu')
+#config.update("jax_platform_name",'cpu')
 
 
-def ipopt(objective,con_eq_jit,con_ineq_jit,x0,bnds):
+def ipopt(objective,con_eq,con_ineq,x0,bnds):
 
     """
     Algorithmic Differentiation
@@ -18,8 +18,8 @@ def ipopt(objective,con_eq_jit,con_ineq_jit,x0,bnds):
     #jit (just-in-time) functions
 
     obj_jit = jit(objective)
-    con_eq_jit = jit(con_eq_jit)
-    con_ineq_jit = jit(con_ineq_jit)
+    con_eq_jit = jit(con_eq)
+    con_ineq_jit = jit(con_ineq)
 
     #build the derivatives and jit them
 
@@ -50,25 +50,25 @@ def ipopt(objective,con_eq_jit,con_ineq_jit,x0,bnds):
 
     #Executing the solver
     
-    #Executing the solver
+    #Executing the solver\
+
     res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
-            'disp':5,
-            'tol': 1e-6,
-            'max_iter': 5000,
-            'linear_solver': 'mumps',
-            'hessian_approximation': 'limited-memory',
-            'mu_init': 1e-4,
-            'constr_viol_tol': 1e-50,
-            'obj_scaling_factor': 1e-10,
-            'nlp_scaling_method': 'gradient-based',
-            'mu_strategy': 'adaptive',
-            'acceptable_tol': 1e-1,
-            'acceptable_iter': 5 
-        })
-    
+                'disp':5,
+                'tol': 1e-4,
+                'max_iter': 5000,
+                'linear_solver': 'mumps',
+                'hessian_approximation': 'exact',
+                'mu_init': 0.01,
+                'mu_strategy': 'monotone',
+                #'constr_viol_tol': 1e-50,
+                'obj_scaling_factor': 1e10,
+                'nlp_scaling_method': 'gradient-based',
+                #'acceptable_tol': 1e-2,
+                #'acceptable_iter': 5 
+    })
     
     x_r_k = res['x']
 
 
 
-    return x_r_k
+    return res
