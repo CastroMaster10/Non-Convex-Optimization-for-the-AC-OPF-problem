@@ -31,7 +31,6 @@ $$
 \begin{align*}
 \min_{\{p_i^g\}} \sum_{i \in \mathcal{N}} f_i(p_i^g)
 \end{align*}
-\tag{1a}
 $$
 
 where $f_i(p_i^g)$ is the cost function of the generator at bus $i$, typically modeled as:
@@ -49,20 +48,17 @@ $$
 $$
 p_i^g - p_i^d = G_{ii}(e_i^2 + f_i^2) + \sum_{j \in \delta(i)} \left[ G_{ij}(e_i e_j + f_i f_j) - B_{ij}(e_i f_j - e_j f_i) \right]
 \quad \forall i \in N
-\tag{1b}
 $$
 
 $$
 q_i^g - q_i^d = B_{ii}(e_i^2 + f_i^2) + \sum_{j \in \delta(i)} \left[ G_{ij}(e_i f_j + e_j f_i) + B_{ij}(e_i e_j - f_i f_j) \right]
 \quad \forall i \in N
-\tag{1c}
 $$
 
 **Branch Flow Limits (Inequality Constraints)**:
 
 $$
 p_{ij}^2 + q_{ij}^2 \leq s_{ij}^2, \quad \forall (i, j) \in \mathcal{E}
-\tag{1d}
 $$
 
 Where:
@@ -79,14 +75,12 @@ $$
 
 $$
 v_i^2 \leq e_i^2 + f_i^2 \leq \bar{v}_i^2, \quad \forall i \in \mathcal{N}
-\tag{1e}
 $$
 
 **Generator Capacity Limits**:
 
 $$
 \underline{p}_i^g \leq p_i^g \leq \bar{p}_i^g, \quad \underline{q}_i^g \leq q_i^g \leq \bar{q}_i^g, \quad \forall i \in \mathcal{N}
-\tag{1f}
 $$
 
 **Variables:**
