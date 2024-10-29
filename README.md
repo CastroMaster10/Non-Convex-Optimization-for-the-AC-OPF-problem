@@ -46,17 +46,13 @@ $$
 **Power Balance Equations (Equality Constraints):**
 
 $$
-\begin{align*}
-p_i^g - p_i^d = G_{ii}(e_i^2 + f_i^2) + \sum_{j \in \delta(i)} \left( G_{ij}(e_i e_j + f_i f_j) - B_{ij}(e_i f_j - e_j f_i) \right), \quad \forall i \in \mathcal{N}
-\tag{1b}
-\end{align*}
+p_i^g - p_i^d = G_{ii}(e_i^2 + f_i^2) + \sum_{j \in \delta(i)} \left[ G_{ij}(e_i e_j + f_i f_j) - B_{ij}(e_i f_j - e_j f_i) \right]
+\quad \forall i \in N
 $$
 
 $$
-\begin{align*}
-q_i^g - q_i^d = -B_{ii}(e_i^2 + f_i^2) + \sum_{j \in \delta(i)} \left( -B_{ij}(e_i e_j + f_i f_j) - G_{ij}(e_i f_j - e_j f_i) \right), \quad \forall i \in \mathcal{N}
-\tag{1c}
-\end{align*}
+q_i^g - q_i^d = B_{ii}(e_i^2 + f_i^2) + \sum_{j \in \delta(i)} \left[ G_{ij}(e_i f_j + e_j f_i) + B_{ij}(e_i e_j - f_i f_j) \right]
+\quad \forall i \in N
 $$
 
 **Branch Flow Limits (Inequality Constraints):**
