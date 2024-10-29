@@ -54,14 +54,14 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
 
     res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
                 'disp':5,
-                'tol': 1e-4,
+                'tol': 1e-9,
                 'max_iter': 5000,
                 'linear_solver': 'mumps',
-                'hessian_approximation': 'exact',
-                'mu_init': 0.01,
+                'hessian_approximation': 'limited-memory',
+                'mu_init': 1e-5,
                 'mu_strategy': 'monotone',
-                #'constr_viol_tol': 1e-50,
-                'obj_scaling_factor': 1e10,
+                'constr_viol_tol': 1e-10,
+                #'obj_scaling_factor': 1,
                 'nlp_scaling_method': 'gradient-based',
                 #'acceptable_tol': 1e-2,
                 #'acceptable_iter': 5 
