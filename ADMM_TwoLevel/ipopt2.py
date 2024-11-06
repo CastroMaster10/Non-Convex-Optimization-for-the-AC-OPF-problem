@@ -51,21 +51,22 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
     #Executing the solver
     
     #Executing the solver\
-
-    res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
-                'disp':5,
-                'tol': 1e-9,
-                'max_iter': 5000,
-                'linear_solver': 'mumps',
-                'hessian_approximation': 'limited-memory',
-                'mu_init': 1e-5,
-                'mu_strategy': 'monotone',
-                'constr_viol_tol': 1e-10,
-                #'obj_scaling_factor': 1,
-                'nlp_scaling_method': 'gradient-based',
-                #'acceptable_tol': 1e-2,
-                #'acceptable_iter': 5 
-    })
+    if bnds:
+        res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
+            'disp': True,
+            'hessian_approximation': 'exact',
+            'constr_viol_tol': 1e-8,
+            'obj_scaling_factor': 1.0,
+            'mu_strategy': 'monotone',
+            'acceptable_constr_viol_tol': 1e-8,
+            'acceptable_tol': 1e-2,
+            'acceptable_iter': 15,
+        })
+    else:
+        res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,options={
+            'disp': True,
+            'hessian_approximation': 'exact',
+            })
     
     x_r_k = res['x']
 
