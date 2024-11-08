@@ -4,7 +4,7 @@ import jax
 
 class LocalUpdate_ACOPF:
 
-    def __init__(self,net,regions,region,G,B,S,xbar,rho,y,idx_buses_before,idx_buses_after,z):
+    def __init__(self,net,regions,region,G,B,S,xbar,rho,y,idx_buses_before,idx_buses_after,z,d):
 
         #Transform each data structure of the net into jax numpy
         for key,matrix in net.items():
@@ -21,7 +21,7 @@ class LocalUpdate_ACOPF:
         self.idx_buses_before = idx_buses_before
         self.idx_buses_after = idx_buses_after
         self.z = z
-        
+        self.d = d
     
     def objective(self,x):
         "Local Objective function"
@@ -46,7 +46,6 @@ class LocalUpdate_ACOPF:
         for i in self.net['gencost'][:,0]:
             total_c += a[idx] *  pg[i.astype(int)] ** 2 + b[idx] * pg[i.astype(int)] + c[idx]
             idx += 1
-
         
         X_bound_v = X_bound.reshape(-1)
         X_bound_v_e = X_bound_v[:len(x_bound)]
@@ -58,36 +57,15 @@ class LocalUpdate_ACOPF:
 
         Ar_xr = jnp.concatenate([Ar_xr_e,Ar_xr_f])
 
-        #xbar
-        xbar_e = self.xbar[:len(self.xbar) // 2]
-        xbar_f = self.xbar[len(self.xbar) // 2:]
-
-        xbar_e_r = xbar_e[self.idx_buses_before:self.idx_buses_before + len(x_bound)]
-        xbar_f_r = xbar_f[self.idx_buses_before:self.idx_buses_before + len(x_bound)]
-
-        Br_xbar_e = jnp.concatenate([jnp.zeros(self.idx_buses_before),xbar_e_r,jnp.zeros(self.idx_buses_after)])
-        Br_xbar_f = jnp.concatenate([jnp.zeros(self.idx_buses_before),xbar_f_r,jnp.zeros(self.idx_buses_after)])
-        
-        Br_xbar = jnp.concatenate([Br_xbar_e,Br_xbar_f])
-        
-        #z
-        z_e = self.z[:len(self.z) // 2]
-        z_f = self.z[len(self.z) // 2:]
-
-        z_e_r = z_e[self.idx_buses_before:self.idx_buses_before + len(x_bound)]
-        z_f_r = z_f[self.idx_buses_before:self.idx_buses_before + len(x_bound)]
-
-        Br_z_e = jnp.concatenate([jnp.zeros(self.idx_buses_before),z_e_r,jnp.zeros(self.idx_buses_after)])
-        Br_z_f = jnp.concatenate([jnp.zeros(self.idx_buses_before),z_f_r,jnp.zeros(self.idx_buses_after)])
-        
-        Br_z = jnp.concatenate([Br_z_e,Br_z_f])
-
-
+    
 
         #Arx^r -  xbar
-        y_Ax_r = jnp.dot(self.y,Ar_xr)
         #penalty
-        consensus = Ar_xr - Br_xbar +  Br_z
+        Ar_xr = jnp.sqrt(Ar_xr[:self.d//2] ** 2 +  Ar_xr[self.d//2:] ** 2)
+
+        y_Ax_r = jnp.dot(self.y,Ar_xr)
+        
+        consensus = Ar_xr - self.xbar +  self.z
 
         #eq_arr = self.eq_constraints(x)
         #eq_arr_scaled = (eq_arr - jnp.min(eq_arr)) / (jnp.max(eq_arr) - jnp.min(eq_arr))

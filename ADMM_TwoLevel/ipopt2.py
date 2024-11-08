@@ -55,12 +55,13 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
             'disp': True,
             'hessian_approximation': 'exact',
-            'constr_viol_tol': 1e-8,
-            'obj_scaling_factor': 1.0,
-            'mu_strategy': 'monotone',
-            'acceptable_constr_viol_tol': 1e-8,
-            'acceptable_tol': 1e-2,
-            'acceptable_iter': 15,
+            'constr_viol_tol': 1e-10,
+            'obj_scaling_factor': 1e2,
+            'mu_strategy': 'adaptive',
+            #'mu_max_fact': 1e6,
+            #'acceptable_constr_viol_tol': 1e-8,
+            #'acceptable_tol': 1e-4,
+            #'acceptable_iter': 30,
         })
     else:
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,options={
