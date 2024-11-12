@@ -22,6 +22,7 @@ class LocalUpdate_ACOPF:
         self.idx_buses_after = idx_buses_after
         self.z = z
         self.d = d
+
     
     def objective(self,x):
         "Local Objective function"
@@ -58,7 +59,6 @@ class LocalUpdate_ACOPF:
         Ar_xr = jnp.concatenate([Ar_xr_e,Ar_xr_f])
 
     
-
         #Arx^r -  xbar
         #penalty
         Ar_xr = jnp.sqrt(Ar_xr[:self.d//2] ** 2 +  Ar_xr[self.d//2:] ** 2)
@@ -67,11 +67,18 @@ class LocalUpdate_ACOPF:
         
         consensus = Ar_xr - self.xbar +  self.z
 
-        #eq_arr = self.eq_constraints(x)
-        #eq_arr_scaled = (eq_arr - jnp.min(eq_arr)) / (jnp.max(eq_arr) - jnp.min(eq_arr))
-        penalty =  self.rho /2 * (jnp.linalg.norm(consensus)) ** 2
 
-        return jnp.sum(total_c + y_Ax_r + penalty)
+        #Equality and inequality constraints
+        eq_arr = self.eq_constraints(x)
+        ineq_arr = self.ineq_constraints(x)
+        #eq_arr_y = jnp.dot(eq_arr, self.constr_y)
+        eq_arr_scaled = (eq_arr - jnp.min(eq_arr)) / (jnp.max(eq_arr) - jnp.min(eq_arr))
+
+        penalty =  self.rho /2 * (jnp.linalg.norm(consensus) ** 2 + jnp.linalg.norm(eq_arr_scaled) ** 2)
+
+        f_xr = total_c + y_Ax_r + penalty
+
+        return f_xr
     
     def eq_constraints(self,x):
         x_int = jnp.array(list(self.regions[self.region][0]),dtype=jnp.int32)

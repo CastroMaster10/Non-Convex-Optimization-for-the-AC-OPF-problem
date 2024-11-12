@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 from .ipopt2 import ipopt
 from .LocalUpdate_twoLevel_ACOPF import LocalUpdate_ACOPF
+import time
 
 
 
@@ -122,6 +123,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
     gcost_arr = [objective(x_r_arr,net,regions)]
     infeasibility_arr = [jnp.linalg.norm(xj_arr - xbar)]
     z_arr = [jnp.linalg.norm(z)]
+    iteration_times = []
 
     print("Initial values and constraint violations for x_r0")
     for idx,x_r in enumerate(x_r_arr0):
@@ -130,11 +132,11 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
         idx_buses_before_i =  idx_buses_arr[region][0]
         idx_buses_after_i =  idx_buses_arr[region][1]
         bnds_r = bnds_arr[idx]
-                
+
 
         local_update =  LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar,rho,y,idx_buses_before_i,idx_buses_after_i,z,d)
 
-        ineq_viol = local_update.eq_constraints(x_r)[jnp.where(local_update.ineq_constraints(x_r) > 1e-4)[0]]
+        ineq_viol = local_update.ineq_constraints(x_r)[jnp.where(local_update.ineq_constraints(x_r) > 1e-4)[0]]
 
         print(f'Region {region}\n \t-Equality constraints violation: {jnp.sum(jnp.abs(local_update.eq_constraints(x_r)))}')
         print(f'Inequality constraints violation: {jnp.sum(jnp.abs(ineq_viol))}')
@@ -145,6 +147,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
 
 
     while jnp.linalg.norm(xj_arr - xbar) >=  (jnp.sqrt(d//2) * 1e-5):
+        start_time = time.time()
 
         """
         Outer Loop
@@ -179,6 +182,8 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
             #Keep track of local constraints violations
             eq_cons_violation = []
             ineq_cons_violation = []
+            solver_messages =  []
+
 
             #Local update for each agent r
             for idx,x_r in enumerate(x_r_arr):
@@ -186,12 +191,14 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
                 idx_buses_before_i =  idx_buses_arr[region][0]
                 idx_buses_after_i =  idx_buses_arr[region][1]
                 bnds_r = bnds_arr[idx]
+    
                 
-
                 local_update =  LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar,rho,y,idx_buses_before_i,idx_buses_after_i,z,d)
                 #Implement Interior Point Method Solver to solve Local Problem from region R
                 res_local = ipopt(local_update.objective,local_update.eq_constraints,local_update.ineq_constraints,x_r,bnds_r)
                 x_r_new = res_local['x']
+
+                solver_messages.append(res_local['message'])
                 eq_cons_violation.append(local_update.eq_constraints(x_r_new))
                 ineq_cons_violation.append(local_update.ineq_constraints(x_r_new)[jnp.where(local_update.ineq_constraints(x_r_new) >  1e-4)])
 
@@ -235,6 +242,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
 
             
             print(f'\nN. Iteration for Inner Loop: {t}')
+            #print(f'Local constraint violation: {sum(objective_p)}')
             #print(f'\nTotal Generation cost: {objective(x_r_arr,net,regions)}')
             #print('\nConstraints violation for each region')
             #for idx in range(len(eq_cons_violation)):
@@ -242,10 +250,11 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
             #    print(f'\t-Ineq constraint violation: {jnp.sum(ineq_cons_violation[idx])}')
             
             #print(f'\nint values: {int_values}')
-            print(f'\n|| z ||: {jnp.linalg.norm(z)}')
-            print(f'\n|| y ||: {jnp.linalg.norm(y)}')
-            print(f'\n|| xbar ||: {jnp.linalg.norm(xbar)}')
+            #print(f'\n|| z ||: {jnp.linalg.norm(z)}')
+            #print(f'\n|| y ||: {jnp.linalg.norm(y)}')
+            #print(f'\n|| xbar ||: {jnp.linalg.norm(xbar)}')
             print(f'\n|| Axr + Bx ||: {jnp.linalg.norm(xj_arr - xbar)}')
+            #print(f'\nSolver messages: {solver_messages}')
             #print(f'\nObjective function (with penalty): {sum(objective_i)}')
             #print(f'\nxbar: {xbar}')
             #print(f'\nGlobal infeasibility with z || Axr + Bx + + z||: {jnp.linalg.norm(xj_arr - xbar + z)}')
@@ -267,7 +276,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
         print(f'Number of iterationns for inner loop: {t}')
         print('\nConstraints violation for each region')
         for idx in range(len(eq_cons_violation)):
-            print(f'Region {idx + 1}\n \t-Equality constraints violation: {jnp.linalg.norm(eq_cons_violation[idx])}')
+            print(f'Region {idx + 1}\n \t-Equality constraints violation: {jnp.sum(jnp.abs(eq_cons_violation[idx]))}')
             print(f'\t-Ineq constraint violation: {jnp.sum(ineq_cons_violation[idx])}')
         print("\n Global Infeasibility without z ||Ax^k + Bx^k||: ",jnp.linalg.norm(xr_j_new - xbar_new))
         print(f'\nGeneretation cost: {objective(x_r_new_arr,net,regions)}')
@@ -289,9 +298,20 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
         
         infeasibility_arr.append(jnp.linalg.norm(jnp.abs(xj_arr) - jnp.abs(xbar)))
         gcost_arr.append(objective(x_r_arr,net,regions))
+
+        """
+        
+        if  jnp.linalg.norm(infeasibility_arr[-1]) - jnp.linalg.norm(infeasibility_arr[-2]) <= 1e-8:
+            print("\nNo changes")
+            break
+        """
         
 
         k += 1
+
+        end_time = time.time()
+        iteration_time = end_time - start_time
+        iteration_times.append(iteration_time)
 
 
         
@@ -300,7 +320,8 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
         "xbar": xbar,
         "z": z,
         "infeasibility_arr": infeasibility_arr,
-        "generation_cost_arr": gcost_arr
+        "generation_cost_arr": gcost_arr,
+        "iteration_times": iteration_times
         
     }
 
