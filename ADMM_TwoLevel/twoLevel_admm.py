@@ -120,6 +120,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
 
     xbar = xbar0
 
+    
     gcost_arr = [objective(x_r_arr,net,regions)]
     infeasibility_arr = [jnp.linalg.norm(xj_arr - xbar)]
     z_arr = [jnp.linalg.norm(z)]
@@ -143,6 +144,8 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
     
     print(f'\n Total Generation cost: {objective(x_r_arr0,net,regions)}')
     print(f'\n|| Axr + Bx ||: {xj_arr - xbar}')
+    
+
 
 
 
@@ -214,7 +217,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
             #Global update
             #xbar_new_proj_e =  (xr_j_new[:d//2] + int_values_e +  2*z[:d//2]) / 2  + y[:d//2] /  rho 
             #xbar_new_proj_f =   (xr_j_new[d//2:] +  int_values_f +  2* z[d//2:]) / 2  +  y[d//2:] /  rho
-            xbar_new_proj =   (xr_j_new +  xj_int +  2 * z) / 2  +  y /  rho
+            xbar_new_proj =   (xr_j_new + xj_int) / 2  + y /  rho + z
             #xbar_new_e = jnp.clip(xbar_new_proj_e,0.8140638470649719,1.0599999999)
             #xbar_new_f = jnp.clip(xbar_new_proj_f,-0.4699999988079071,0.52999)
             #xbar_new = jnp.concatenate([xbar_new_e,xbar_new_f])
@@ -319,8 +322,8 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,d,beta,alpha,x_r_arr0,bn
         "x_r": x_r_arr,
         "xbar": xbar,
         "z": z,
-        "infeasibility_arr": infeasibility_arr,
-        "generation_cost_arr": gcost_arr,
+        "infeasibility_arr": infeasibility_arr[1:],
+        "generation_cost_arr": gcost_arr[1:],
         "iteration_times": iteration_times
         
     }

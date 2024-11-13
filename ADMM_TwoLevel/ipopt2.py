@@ -76,7 +76,6 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
             'disp': True,
             'hessian_approximation': 'exact',
-            'limited_memory_max_history': 20,
             'constr_viol_tol': 1e-10,
             'obj_scaling_factor': 1e2,
             'mu_strategy': 'adaptive'

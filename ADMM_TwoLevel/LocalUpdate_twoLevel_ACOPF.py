@@ -69,13 +69,13 @@ class LocalUpdate_ACOPF:
 
 
         #Equality and inequality constraints
-        eq_arr = self.eq_constraints(x)
-        ineq_arr = self.ineq_constraints(x)
+        #eq_arr = self.eq_constraints(x)
+        #ineq_arr = self.ineq_constraints(x)
         #eq_arr_y = jnp.dot(eq_arr, self.constr_y)
-        eq_arr_scaled = (eq_arr - jnp.min(eq_arr)) / (jnp.max(eq_arr) - jnp.min(eq_arr))
+        #eq_arr_scaled = (eq_arr - jnp.min(eq_arr)) / (jnp.max(eq_arr) - jnp.min(eq_arr))
 
-        penalty =  self.rho /2 * (jnp.linalg.norm(consensus) ** 2 + jnp.linalg.norm(eq_arr_scaled) ** 2)
-
+        penalty =  self.rho /2 * (jnp.linalg.norm(consensus) ** 2)
+        
         f_xr = total_c + y_Ax_r + penalty
 
         return f_xr

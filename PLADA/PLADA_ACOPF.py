@@ -50,8 +50,8 @@ class PLADA_ACOPF:
      
             sol_x = self.ipopt_x(self.update_x,self.eq_constraints,self.x,self.bnds_x)
             new_x = sol_x['x']
-            """            
-            sol_u = self.ipopt_u(self.update,self.u)
+                
+            sol_u = self.ipopt_u(self.update_u,self.u)
             new_u = sol_u['x']
 
             self.gamma = min(gamma0,(self.rho * self.delta) /(jnp.linalg.norm(self.lambd - self.mu) +1)) 
@@ -69,7 +69,7 @@ class PLADA_ACOPF:
             self.mu = new_mu
             self.lambd = new_lambd
             self.z = new_z 
-            """
+            
             self.x = new_x
             print(f'\nIteration {k}')
 
@@ -80,7 +80,7 @@ class PLADA_ACOPF:
     
     def update_u(self,u):
         u_update = jnp.dot(grad(self.lagrange,argnums=2)(self.x,self.lambd,self.u,self.mu),u - self.u) +  1/(2 * self.tao) * jnp.linalg.norm(u - self.u) ** 2
-        return jnp.clip(u_update,0,jnp.linal.norm(self.ineq_constraints(self.x) - self.tol_constr))
+        return u_update
     
     
     def lagrange(self,x,lambd,u,mu):
@@ -93,25 +93,39 @@ class PLADA_ACOPF:
         new_x = jnp.dot(grad(self.objective)(self.x),x) + jnp.dot(self.lambd,self.ineq_constraints(x) - self.tol_constr) + 1/(2 * self.lr) * jnp.linalg.norm(x - self.x) ** 2
         return new_x
 
-    
-    def objective(self,x):
+    def objective(self, x):
+        # Assuming self.n_buses and self.net['gencost'] are available
+        n_buses = self.n_buses  # Should be an integer
+        x_int = np.arange(n_buses, dtype=np.int32)  # Use NumPy array
+        generators_idx = self.net['gencost'][:, 0].astype(np.int32)  # NumPy array
 
-        x_int = jnp.array([i for i in range(self.n_buses)],dtype=jnp.int32)
+        # Use integer constants for lengths
+        len_x_int = n_buses  # n_buses is an integer
 
-        pg = x[:len(x_int)]
-        gencost_data_r = self.net['gencost'][:,4:]
+        # Slice x using known integer length
+        pg_full = x[:len_x_int]
 
-        a = gencost_data_r[:,0]
-        b = gencost_data_r[:,1]
-        c = gencost_data_r[:,2]
-                
-        #c_r(x)
-        total_c = 0
+        # Index pg_full using NumPy array (static indices)
+        pg = pg_full[generators_idx]
 
-        for i in self.net['gencost'][:,0]:
-            total_c += a[i.astype(int)] *  pg[i.astype(int)] ** 2 + b[i.astype(int)] * pg[i.astype(int)] + c[i.astype(int)]
+        # Extract generator cost coefficients
+        gencost_data_r = self.net['gencost'][:, 4:]
+
+        # Convert to NumPy arrays
+        a = gencost_data_r[:, 0]
+        b = gencost_data_r[:, 1]
+        c = gencost_data_r[:, 2]
+
+        # Convert to JAX arrays
+        a = jnp.array(a)
+        b = jnp.array(b)
+        c = jnp.array(c)
+
+        # Compute total cost
+        total_c = jnp.sum(a * pg ** 2 + b * pg + c)
 
         return total_c
+
        
 
 
@@ -126,7 +140,7 @@ class PLADA_ACOPF:
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=u0,options={
             "tol": 1e-8,
             "check_derivatives_for_naninf": "yes",                           # Tighten convergence tolerance for better accuracy
-            "hessian_approximation": 'exact',
+            "hessian_approximation": 'limited-memory',
             "max_iter": 5000,                      # Increase max iterations to allow more time for convergence
             "mu_strategy": "adaptive",             # Use adaptive barrier parameter strategy for stability
 
@@ -180,7 +194,7 @@ class PLADA_ACOPF:
         "tol": 1e-8,
         "check_derivatives_for_naninf": "yes",                           # Tighten convergence tolerance for better accuracy
         #"constr_viol_tol": 1e-12,               # Reduce constraint violation tolerance to improve feasibility
-        "hessian_approximation": 'exact',
+        "hessian_approximation": 'limited-memory',
         #"obj_scaling_factor": 1e8,
         #"nlp_scaling_max_gradient": 1e8,
         #"limited_memory_max_history": 20,
