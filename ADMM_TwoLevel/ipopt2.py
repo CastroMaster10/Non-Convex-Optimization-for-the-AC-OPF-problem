@@ -28,9 +28,10 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
     con_eq_jac = jit(jacfwd(con_eq_jit))  # jacobian
     con_ineq_jac = jit(jacfwd(con_ineq_jit))  # jacobian
     con_eq_hess = jacrev(jacfwd(con_eq_jit)) # hessian
+    con_ineq_hess = jacrev(jacfwd(con_ineq_jit))  # hessian
     #con_eq_hessvp = jit(lambda x, v: con_eq_hess(x) * v[0]) # hessian vector-product
     #con_ineq_hessvp = jit(lambda x, v: con_ineq_hess(x) * v[0]) # hessian vector-product
-
+    
     def con_eq_hessvp(x, v):
         H = con_eq_hess(x)  # H has shape (m, n, n)
         # Compute the weighted sum of the Hessians
@@ -41,17 +42,17 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
     # JIT compile the function
     con_eq_hessvp = jit(con_eq_hessvp)
 
-    con_ineq_hess = jacrev(jacfwd(con_ineq_jit))  # hessian
 
     def con_ineq_hessvp(x, v):
         H = con_ineq_hess(x)  # H has shape (m, n, n)
         # Compute the weighted sum of the Hessians
         Hv = jnp.tensordot(v, H, axes=1)  # Sum over m constraints
         return Hv  # Returns an array of shape (n, n)
-            
-
     # JIT compile the function
     con_ineq_hessvp = jit(con_ineq_hessvp)
+    
+            
+
 
     #constraints
     cons = [
@@ -76,9 +77,10 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
             'disp': True,
             'hessian_approximation': 'exact',
-            'constr_viol_tol': 1e-10,
+            'constr_viol_tol': 1e-6,
             'obj_scaling_factor': 1e2,
-            'mu_strategy': 'adaptive'
+            'mu_strategy': 'adaptive',
+            'max_iter': 3000,
         })
     
     

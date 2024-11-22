@@ -48,7 +48,7 @@ x0 = np.array([1.0, 5.0, 5.0, 1.0])
 bnds = [(1, 5) for _ in range(x0.size)]
 
 # executing the solver
-res = minimize_ipopt(obj_jit, jac=obj_grad, hess=obj_hess, x0=x0, bounds=bnds,constraints=cons,options={
+res = minimize_ipopt(obj_jit, jac=obj_grad, hess=obj_hess, x0=x0, bounds=bnds,options={
     'disp': 5
 })
 print(res)

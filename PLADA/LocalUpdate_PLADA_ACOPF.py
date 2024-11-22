@@ -2,11 +2,11 @@ import jax.numpy as jnp
 import numpy as np
 from  jax import ops
 import collections
+from jax import grad
 
+class LocalUpdate_ACOPF_PLADA:
 
-class LocalUpdate_ACOPF:
-
-    def __init__(self,net,regions,region,G,B,S,xbar_r,rho,y,z):
+    def __init__(self,net,regions,region,G,B,S,xbar_r,rho,y,z,lambd,lr):
 
         #Transform each data structure of the net into jax numpy
         for key,matrix in net.items():
@@ -24,18 +24,43 @@ class LocalUpdate_ACOPF:
         self.x_int = jnp.sort(jnp.array(list(self.regions[self.region][0])))
         self.xj_int = jnp.sort(jnp.array(list(self.regions[self.region][1])))
         self.x_bound = jnp.sort(jnp.array(list(self.regions[self.region][2])))
-        
         self.xj_int_idx = jnp.array(np.where(np.isin(self.x_int, self.xj_int))[0])
+        self.lambd = lambd
+        self.lr = lr
+
     
     def objective(self,x):
-        "Local Objective function"
 
-
-               
-        #X_int = x.reshape((4,-1))[:,x_int]
-        #X_bound = x.reshape((4,-1))[:,x_bound][2:,:]
         X_int = x[:len(self.x_int) * 4].reshape((4,-1))
-        X_bound = x[len(self.x_int) * 4:].reshape((2,-1))        
+        X_bound = x[len(self.x_int) * 4:].reshape((2,-1))
+
+
+
+        X_bound_v = X_bound.reshape(-1)
+        X_bound_v_e = X_bound_v[:len(X_bound_v) // 2]
+        X_bound_v_f = X_bound_v[len(X_bound_v) // 2:]
+
+        bound_xj = jnp.sqrt(X_bound_v_e ** 2 +  X_bound_v_f ** 2)
+        int_xj = jnp.sqrt(X_int[2,self.xj_int_idx] ** 2 +  X_int[3,self.xj_int_idx] ** 2)
+
+        buses_idx = jnp.concatenate([self.xj_int,self.x_bound],dtype=jnp.int32)
+        xj_r_unsorted = jnp.concatenate([int_xj,bound_xj])
+        
+
+        sorted_indices = jnp.argsort(buses_idx)
+        buses_idx_sorted = buses_idx[sorted_indices]
+
+        xj_r = xj_r_unsorted[sorted_indices]
+        g_x = xj_r - self.xbar_r + self.u - self.z
+        grad_objfunc = jnp.dot(grad(self.objective)(self.x),x)
+        lambd_g = jnp.dot(self.lambd,g_x)
+        penalty = 1/2*self.lr *  jnp.linalg.norm(x - self.x)**2
+
+        f_x = grad_objfunc + lambd_g + penalty 
+        return f_x
+    
+    def generation_cost(self,x):
+        "Local Objective function"       
         
         pg = x[:len(self.x_int)]
         gencost_data_r = self.net['gencost'][:,4:]
@@ -50,49 +75,10 @@ class LocalUpdate_ACOPF:
         for i in self.net['gencost'][:,0]:
             total_c += a[idx] *  pg[i.astype(int)] ** 2 + b[idx] * pg[i.astype(int)] + c[idx]
             idx += 1
-            
-        X_bound_v = X_bound.reshape(-1)
-        X_bound_v_e = X_bound_v[:len(X_bound_v) // 2]
-        X_bound_v_f = X_bound_v[len(X_bound_v) // 2:]
+        
 
-
-        #Ar_xr_e = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_e,jnp.zeros(self.idx_buses_after)])
-        #Ar_xr_f = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_f,jnp.zeros(self.idx_buses_after)])
-
-        #Ar_xr = jnp.concatenate([Ar_xr_e,Ar_xr_f])
+        return total_c
     
-        bound_xj = jnp.sqrt(X_bound_v_e ** 2 +  X_bound_v_f ** 2)
-        #Arx^r -  xbar
-        int_xj = jnp.sqrt(X_int[2,self.xj_int_idx] ** 2 +  X_int[3,self.xj_int_idx] ** 2)
-
-
-
-        buses_idx = jnp.concatenate([self.xj_int,self.x_bound],dtype=jnp.int32)
-        xj_r_unsorted = jnp.concatenate([int_xj,bound_xj])
-        
-
- 
-   
-        sorted_indices = jnp.argsort(buses_idx)
-        buses_idx_sorted = buses_idx[sorted_indices]
-        xj_r = xj_r_unsorted[sorted_indices]
-  
-
-        y_xj_r = jnp.dot(self.y,xj_r)
-
-        
-        consensus = xj_r - self.xbar_r +  self.z
-
-        #Equality and inequality constraints
-        #eq_arr = self.eq_constraints(x)
-        #ineq_arr = self.ineq_constraints(x)
-        #eq_arr_y = jnp.dot(eq_arr, self.constr_y)
-        #eq_arr_scaled = (eq_arr - jnp.min(eq_arr)) / (jnp.max(eq_arr) - jnp.min(eq_arr))
-
-        penalty =  (self.rho /2) * (jnp.linalg.norm(consensus))
-        f_xr = total_c + y_xj_r  + penalty
-
-        return f_xr
     
     def eq_constraints(self,x):
 
