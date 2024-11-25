@@ -63,7 +63,7 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,d,beta,alpha,x_r_arr0,bnds_xr_arr,xbar
         """
         Outer Loop
         """
-        #Initialize values for Inner Loop
+
         if k > max_iter_outer:
             break
 
@@ -231,9 +231,9 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,d,beta,alpha,x_r_arr0,bnds_xr_arr,xbar
         iteration_time = end_time - start_time
         iteration_times.append(iteration_time)
 
-        if  jnp.abs(infeasibility_arr[-1] - infeasibility_arr[-2]) <= 1e-8:
-            print("\nNo changes")
-            break
+        #if  jnp.abs(infeasibility_arr[-1] - infeasibility_arr[-2]) <= 1e-8:
+        #    print("\nNo changes")
+        #    break
 
         
     return {

@@ -78,7 +78,7 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
             'disp': True,
             'hessian_approximation': 'exact',
             'constr_viol_tol': 1e-6,
-            'obj_scaling_factor': 1e2,
+            'obj_scaling_factor': 1e8,
             'mu_strategy': 'adaptive',
             'max_iter': 3000,
         })

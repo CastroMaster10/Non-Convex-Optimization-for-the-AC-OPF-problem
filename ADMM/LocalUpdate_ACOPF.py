@@ -1,12 +1,14 @@
 import jax.numpy as jnp
 import numpy as np
-import jax
+from  jax import ops
+import collections
+
 
 class LocalUpdate_ACOPF:
 
-    def __init__(self,net,regions,region,G,B,S,xbar,rho,alpha,idx_buses_before,idx_buses_after):
+    def __init__(self,net,regions,region,G,B,S,xbar_r,rho,y):
 
-        #Transform each data structure of the net into jax numpy
+   #Transform each data structure of the net into jax numpy
         for key,matrix in net.items():
             net[key] = jnp.array(matrix)
         self.net = net
@@ -15,71 +17,98 @@ class LocalUpdate_ACOPF:
         self.G =  jnp.array(G)
         self.B = jnp.array(B)
         self.S = jnp.array(S)
-        self.xbar = xbar
+        self.xbar_r = xbar_r
         self.rho = rho
-        self.alpha = alpha
-        self.idx_buses_before = idx_buses_before
-        self.idx_buses_after = idx_buses_after
+        self.y = y
+        self.x_int = jnp.sort(jnp.array(list(self.regions[self.region][0])))
+        self.xj_int = jnp.sort(jnp.array(list(self.regions[self.region][1])))
+        self.x_bound = jnp.sort(jnp.array(list(self.regions[self.region][2])))
         
+        self.xj_int_idx = jnp.array(np.where(np.isin(self.x_int, self.xj_int))[0])
     
     def objective(self,x):
         "Local Objective function"
-        x_int = jnp.array(list(self.regions[self.region][0]))
-        x_bound = jnp.array(list(self.regions[self.region][1]))
+
+
                
         #X_int = x.reshape((4,-1))[:,x_int]
         #X_bound = x.reshape((4,-1))[:,x_bound][2:,:]
-        X_int = x[:len(x_int) * 4].reshape((4,-1))
-        X_bound = x[len(x_int) * 4:].reshape((2,-1))        
+        X_int = x[:len(self.x_int) * 4].reshape((4,-1))
+        X_bound = x[len(self.x_int) * 4:].reshape((2,-1))        
         
-        pg = x[:len(x_int)]
-        gencost_data_r = self.net['gencost'][x_int, :][:,4:]
+        pg = x[:len(self.x_int)]
+        gencost_data_r = self.net['gencost'][:,4:]
 
         a = gencost_data_r[:,0]
         b = gencost_data_r[:,1]
         c = gencost_data_r[:,2]
-            
+                
         #c_r(x)
         total_c = 0
-        for i in range(len(x_int)):
-            total_c += a[i] *  pg[i] ** 2 + b[i] * pg[i] + c[i]
+        idx = 0
+        for i in self.net['gencost'][:,0]:
+            total_c += a[idx] *  pg[i.astype(int)] ** 2 + b[idx] * pg[i.astype(int)] + c[idx]
+            idx += 1
+            
+        X_bound_v = X_bound.reshape(-1)
+        X_bound_v_e = X_bound_v[:len(X_bound_v) // 2]
+        X_bound_v_f = X_bound_v[len(X_bound_v) // 2:]
+
+
+        #Ar_xr_e = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_e,jnp.zeros(self.idx_buses_after)])
+        #Ar_xr_f = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_f,jnp.zeros(self.idx_buses_after)])
+
+        #Ar_xr = jnp.concatenate([Ar_xr_e,Ar_xr_f])
+    
+        bound_xj = jnp.sqrt(X_bound_v_e ** 2 +  X_bound_v_f ** 2)
+        #Arx^r -  xbar
+        int_xj = jnp.sqrt(X_int[2,self.xj_int_idx] ** 2 +  X_int[3,self.xj_int_idx] ** 2)
+
+
+
+        buses_idx = jnp.concatenate([self.xj_int,self.x_bound],dtype=jnp.int32)
+        xj_r_unsorted = jnp.concatenate([int_xj,bound_xj])
+        
+
+ 
+   
+        sorted_indices = jnp.argsort(buses_idx)
+        buses_idx_sorted = buses_idx[sorted_indices]
+        xj_r = xj_r_unsorted[sorted_indices]
+  
+
+        y_xj_r = jnp.dot(self.y,xj_r)
 
         
-        X_bound_v = X_bound.reshape(-1)
-        X_bound_v_e = X_bound_v[:len(x_bound)]
-        X_bound_v_f = X_bound_v[len(x_bound):]
+        consensus = xj_r - self.xbar_r 
 
+        #Equality and inequality constraints
+        #eq_arr = self.eq_constraints(x)
+        #ineq_arr = self.ineq_constraints(x)
+        #eq_arr_y = jnp.dot(eq_arr, self.constr_y)
+        #eq_arr_scaled = (eq_arr - jnp.min(eq_arr)) / (jnp.max(eq_arr) - jnp.min(eq_arr))
 
+        penalty =  (self.rho /2) * (jnp.linalg.norm(consensus))
+        f_xr = total_c + y_xj_r  + penalty
 
-        Ar_xr_e = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_e,jnp.zeros(self.idx_buses_after)])
-        Ar_xr_f = jnp.concatenate([jnp.zeros(self.idx_buses_before),X_bound_v_f,jnp.zeros(self.idx_buses_after)])
-
-
-        Ar_xr = jnp.concatenate([Ar_xr_e,Ar_xr_f])
-        #Arx^r -  xbar
-        consensus = Ar_xr - self.xbar
-        #penalty
-        alpha_Ax_r = jnp.dot(self.alpha,consensus)
-        penalty =  self.rho /2 * jnp.linalg.norm(consensus)
-
-        return jnp.sum(total_c + alpha_Ax_r + penalty)
+        return f_xr
     
     def eq_constraints(self,x):
-        x_int = jnp.array(list(self.regions[self.region][0]),dtype=jnp.int32)
-        x_bound = jnp.array(list(self.regions[self.region][1]),dtype=jnp.int32)
-        n_int = len(x_int)
-        n_bound = len(x_bound)
+
+
+        n_int = len(self.x_int)
+        n_bound = len(self.x_bound)
 
         X_int = x[:n_int * 4].reshape((4, -1))
         X_bound = x[n_int * 4:].reshape((2, -1))
 
-        pd_int = self.net['bus'][x_int, 2]
-        qd_int = self.net['bus'][x_int, 3]
+        pd_int = self.net['bus'][self.x_int, 2]
+        qd_int = self.net['bus'][self.x_int, 3]
         pg_int = X_int[0, :]
         qg_int = X_int[1, :]
 
         cons1, cons2 = self.power_balance_constraints_vectorized(
-            X_int, X_bound, pd_int, qd_int, pg_int, qg_int, x_int, x_bound
+            X_int, X_bound, pd_int, qd_int, pg_int, qg_int, self.x_int, self.x_bound
         )
 
         return jnp.concatenate([cons1, cons2])
@@ -141,20 +170,20 @@ class LocalUpdate_ACOPF:
 
 
     def ineq_constraints(self,x):
-        x_int = jnp.array(list(self.regions[self.region][0]),dtype=jnp.int32)
-        x_bound = jnp.array(list(self.regions[self.region][1]),dtype=jnp.int32)
-        n_int = len(x_int)
-        n_bound = len(x_bound)
+        
+
+        n_int = len(self.x_int)
+        n_bound = len(self.x_bound)
 
         X_int = x[:n_int * 4].reshape((4, -1))
         X_bound = x[n_int * 4:].reshape((2, -1))
 
         ei = X_int[2, :]
         fi = X_int[3, :]
-        Vmax = self.net['bus'][x_int, 11]
-        Vmin = self.net['bus'][x_int, 12]
+        Vmax = self.net['bus'][self.x_int, 11]
+        Vmin = self.net['bus'][self.x_int, 12]
 
-        cons3, cons4 = self.thermal_limit_buses_vectorized(X_int, X_bound, x_int, x_bound)
+        cons3, cons4 = self.thermal_limit_buses_vectorized(X_int, X_bound, self.x_int, self.x_bound)
         cons5 = Vmin**2 - (ei**2 + fi**2)
         cons6 = (ei**2 + fi**2) - Vmax**2
 

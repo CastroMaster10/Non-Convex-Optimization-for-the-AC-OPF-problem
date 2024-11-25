@@ -1,118 +1,302 @@
+
 import jax.numpy as jnp
+import numpy as np
 from .ipopt2 import ipopt
-from .GlobalUpdate_ACOPF import GlobalUpdate_ACOPF
 from .LocalUpdate_ACOPF import LocalUpdate_ACOPF
+import time
 
 
-def ADMM_ACOPF(net,regions,G,B,S,idx_buses_arr,alpha,x_r_arr,xbar,rho,bnds_arr,max_iter):
 
+
+def ADMM_ACOPF(net,regions,G,B,S,d,rho,x_r_arr0,bnds_xr_arr0,xbar0,y_arr0,max_iter):
     
-    infi_arr = []
-    gcost_arr = []
+    start_time = time.time()
 
 
-    for _ in range(max_iter):
-        #Local update
-        xnew_r_arr = []
-        #objective_f_new = 0
+    #Initialize values for Outer Loop
+    t = 1
+    tol = 1e-5
+
+    x_r_arr = x_r_arr0
+    xj_rl = get_xj_rl(x_r_arr,regions)
+    bnds_arr = bnds_xr_arr0
+
+    xbar = xbar0
+
+    y_arr = y_arr0 #Dual variable
+
+    gcost_arr = [objective(x_r_arr,net,regions)]
+    infeasibility_arr = [jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))]
+    iteration_times = []
+
+    """    
+    print("Initial values and constraint violations for x_r0")
+    for idx,x_r in enumerate(x_r_arr0):
+        rho = 2 * beta
+        region = idx + 1
+        bnds_r = bnds_arr[idx]
+
+
+        local_update =  LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar,rho,y,z)
+
+        ineq_viol = local_update.ineq_constraints(x_r)[jnp.where(local_update.ineq_constraints(x_r) > 1e-4)[0]]
+
+        print(f'Region {region}\n \t-Equality constraints violation: {jnp.sum(jnp.abs(local_update.eq_constraints(x_r)))}')
+        print(f'Inequality constraints violation: {jnp.sum(jnp.abs(ineq_viol))}')
+    """
+    
+    print(f'\n Total Generation cost: {objective(x_r_arr,net,regions)}')
+    print(f'\n|| Axr + Bx ||: {jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))}')
+    
+    end_time = time.time()
+    iteration_time = end_time - start_time
+    iteration_times.append(iteration_time)
+
+
+
+    while float(jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))) >= float(tol):
+        start_time = time.time()
+        """
+        Inner Loop
+        """
+        if t > max_iter:
+            break
+  
+
+        x_r_new_arr = []
+
+        #Keep track of local constraints violations
         eq_cons_violation = []
         ineq_cons_violation = []
+        solver_messages =  []
+        obj_arr = []
 
+
+        #Local update for each agent r
         for idx,x_r in enumerate(x_r_arr):
-
+                
             region = idx + 1
-            idx_buses_before_regioni,idx_buses_after_regioni = idx_buses_arr[region]
-            bnds_r = bnds_arr[idx]  
+            boundBuses_idx = regions[region][1].union(regions[region][2])
 
-            local_update_i = LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar,rho,alpha,idx_buses_before_regioni,idx_buses_after_regioni)
-            x_r_k = ipopt(local_update_i.objective,local_update_i.eq_constraints,local_update_i.ineq_constraints,x_r,bnds_r)
-            #objective_f_new += local_update_i.objective(x_r_k)
-            eq_cons_violation.append(jnp.sum(local_update_i.eq_constraints(x_r_k)))
-            ineq_cons_violation.append((jnp.where(local_update_i.ineq_constraints(x_r_k) >= 0)[0].size,local_update_i.ineq_constraints(x_r_k).size))
-            xnew_r_arr.append(x_r_k)
+            y_r_dict = {key:value for key, value in y_arr.items() if key.endswith(f'_{region}')}
+            y_r = jnp.array(list(y_r_dict.values()))
 
-   
-        #Global update
-        global_update_i = GlobalUpdate_ACOPF(net,regions,rho,xnew_r_arr,alpha,idx_buses_arr)
-        #new_xbar = global_update.update_xbar(xbar)
-        #new_xbar = ipopt(global_update_i.objective,global_update_i.eq_constraints,global_update_i.ineq_constraints,xbar,[])
-        new_xbar = global_update_i.global_update()
-        alpha_new = alpha
-        Ar_xr_arr = []
-        #Update Dual variable
-        for idx,x_r in enumerate(xnew_r_arr):
-            region = idx + 1
-            idx_buses_before_regioni,idx_buses_after_regioni = idx_buses_arr[region]
+            bnds_r = bnds_arr[idx]
+            xbar_r_dict = {k:v for k,v in xbar.items() if k in boundBuses_idx}
+            xbar_r = jnp.array(list(xbar_r_dict.values()))
 
-            x_int = jnp.array(list(regions[region][0]))
-            x_bound = jnp.array(list(regions[region][1]))
+            local_update =  LocalUpdate_ACOPF(net,regions,region,G,B,S,xbar_r,rho,y_r)
+            #Implement Interior Point Method Solver to solve Local Problem from region R
+            res_local = ipopt(local_update.objective,local_update.eq_constraints,local_update.ineq_constraints,x_r,bnds_r)
+            x_r_new = res_local['x']
+            obj_arr.append(res_local['fun'])
+            solver_messages.append(res_local['message'])
+            eq_cons_violation.append(local_update.eq_constraints(x_r_new))
+            ineq_cons_violation.append(local_update.ineq_constraints(x_r_new)[jnp.where(local_update.ineq_constraints(x_r_new) >  1e-4)])
 
-            X_bound = x_r[len(x_int) * 4:].reshape((2,-1))
+
+            #Add new values from x_r
+            x_r_new_arr.append(x_r_new)
+
+
+        xj_rl_new = get_xj_rl(x_r_new_arr,regions)
+        xbar_new = xbar_update(xj_rl_new,xbar,y_arr,rho)            
+
+        #Slack Variable update
+        Ax_Bx_diff_new = Ax_xbar_difference(xj_rl_new,xbar_new)
+
+        #Dual variable update
+        y_new_values = jnp.array(list(y_arr.values())) +  rho * (Ax_Bx_diff_new)
+        y_arr_new = {key: new_value for key, new_value in zip(y_arr.keys(), y_new_values)}
+
+        #update rho
+                        
+        #if jnp.linalg.norm(Ax_xbar_z_difference(xj_rl_new,xbar_new,z_arr_new)) > theta * jnp.linalg.norm(Ax_xbar_z_difference(xj_rl,xbar,z_arr)):
+        #    rho = lmbda * rho
+        #    print(f'Updating rho={rho}')
+             
+            
 
             
-            X_bound_v = X_bound.reshape(-1)
-            X_bound_v_e = X_bound_v[:len(x_bound)]
-            X_bound_v_f = X_bound_v[len(x_bound):]
 
-            Ar_xr_e = jnp.concatenate([jnp.zeros(idx_buses_before_regioni),X_bound_v_e,jnp.zeros(idx_buses_after_regioni)])
-            Ar_xr_f = jnp.concatenate([jnp.zeros(idx_buses_before_regioni),X_bound_v_f,jnp.zeros(idx_buses_after_regioni)])
 
-            Ar_xr_k = jnp.concatenate([Ar_xr_e,Ar_xr_f])
-            Ar_xr_arr.append(Ar_xr_k)
+        x_r_arr = x_r_new_arr
+        xj_rl = xj_rl_new
+        xbar = xbar_new
+        y_arr = y_arr_new
+
+
+            
+        #print(f'\nN. Iteration for Inner Loop: {t}')
+        #print(f'Local constraint violation: {sum(objective_p)}')
+        #print(f'\nTotal Generation cost: {objective(x_r_arr,net,regions)}')
+        #print('\nConstraints violation for each region')
+        #for idx in range(len(eq_cons_violation)):
+        #    print(f'Region {idx + 1}\n \t-Equality constraints violation: {jnp.sum(jnp.abs(eq_cons_violation[idx]))}')
+        #    print(f'\nRegion {idx+1}\n x_r: {x_r_arr[idx]}')
+        #    print(f'\t-Ineq constraint violation: {jnp.sum(ineq_cons_violation[idx])}')
+        #    print(f'\n\Region {idx+ 1}\n\t-Message : {solver_messages[idx]}')
+        #    print(f'\t-Objective Function (with penalty) : {obj_arr[idx]}')
+     
+        #print(f'\n|| Axr + Bx + z||: {jnp.linalg.norm(Ax_xbar_z_difference(xj_rl,xbar,z_arr))}')
+        #print(f'\n|| Axr + Bx ||: {jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))}')
+
+        #print(f'\n || z ||: {jnp.linalg.norm(jnp.array(list(z_arr.values())))}')
+        #print(f'\n || y ||: {jnp.linalg.norm(jnp.array(list(y_arr.values())))}')
+        #print(f'\nSolver messages: {solver_messages}')
+            #print(f'\nObjective function (with penalty): {sum(objective_i)}')
+        #print(f'\n|| xj_rl ||: {np.linalg.norm(list(xj_rl.values()))}')
+        #print(f'\nxbar: {np.linalg.norm(list(xbar.values()))}')
+        #print(f'\n z: {jnp.array(list(z_arr.values()))}')
+        #print(f'\nGlobal infeasibility with z || Axr + Bx + + z||: {jnp.linalg.norm(xj_arr - xbar + z)}')
+        #print("*******************************************************************")
+        #Check if slack variable hasn't change
+            
+
+
         
-        Ar_xr_arr_new = jnp.sum(jnp.array(Ar_xr_arr),axis=0)
-        alpha_new +=  rho * (Ar_xr_arr_new -  new_xbar)
 
-        #Generation cost
-        generation_cost = 0
-        for idx,x_r in enumerate(xnew_r_arr):
-            region = idx + 1
-            #generation_cost_i = generation_cost(x_r,net,regions,region)
-            #generation_cost += generation_cost_i
-            x_int = jnp.array(list(regions[region][0])) #Interior buses
-            x_bound = jnp.array(list(regions[region][1])) #Boundary buses
-            
-                            
-            pg = x_r[:len(x_int)]
-            gencost_data_r = net['gencost'][x_int, :][:,4:]
-
-            a = gencost_data_r[:,0]
-            b = gencost_data_r[:,1]
-            c = gencost_data_r[:,2]
-                    
-            #c_r(x)
-            total_c = 0
-            for i in range(len(x_int)):
-                total_c += a[i] *  pg[i] ** 2 + b[i] * pg[i] + c[i]
-            
-            generation_cost += total_c
-
-
-        print(f'N. Iteration: {_}')
+        
+        print(f'\n\nN. Loop: {t}')
         print('\nConstraints violation for each region')
         for idx in range(len(eq_cons_violation)):
-            print(f'Region {idx + 1}\n \t-Equality constraints violation: {eq_cons_violation[idx]} \n \t-Inequality constraints violation: {ineq_cons_violation[idx][0]} / {ineq_cons_violation[idx][1]}')
-        print("\nInfeasibility ||Ax + Bx||: ",jnp.linalg.norm(Ar_xr_arr_new - new_xbar))
-        print(f'\nGeneretation cost: {generation_cost}')
+            print(f'Region {idx + 1}\n \t-Equality constraints violation: {jnp.sum(jnp.abs(eq_cons_violation[idx]))}')
+            print(f'\t-Ineq constraint violation: {jnp.sum(ineq_cons_violation[idx])}')
+        print("\n Global Infeasibility without z ||Ax^k + Bx^k||: ",jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar)))
+        print(f'\nGeneretation cost: {objective(x_r_arr,net,regions)}')
+
+
         print('\n----------------------------------------------------------------------')
         
-        x_r_arr = xnew_r_arr
-        xbar = new_xbar
-        alpha = alpha_new
+        
+        infeasibility_arr.append(jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar)))
+        gcost_arr.append(objective(x_r_arr,net,regions))
 
-        #Add values
-        infi_arr.append(jnp.linalg.norm(Ar_xr_arr_new - new_xbar))
-        gcost_arr.append(generation_cost)
+        
+
+        t += 1
+
+        end_time = time.time()
+        iteration_time = end_time - start_time
+        iteration_times.append(iteration_time)
+
+        #if  jnp.abs(infeasibility_arr[-1] - infeasibility_arr[-2]) <= 1e-8:
+        #    print("\nNo changes")
+        #    break
+
+        
+    return {
+        "x_r": x_r_arr,
+        "xbar": xbar,
+        "infeasibility_arr": infeasibility_arr,
+        "generation_cost_arr": gcost_arr,
+        "iteration_times": iteration_times
+        
+    }
 
 
+def get_xj_rl(x_r_arr,regions):
 
-    return  {
-        "x_r":xnew_r_arr, 
-        "xbar":new_xbar, 
-        "alpha":alpha,
-        "infeasibility_arr": infi_arr,
-        "generation_cost": gcost_arr
-        }
+    """
+    Get the local copies of variables in each region
+    """
 
+    xj_r_global = {}
+
+    for idx,x_r in enumerate(x_r_arr):
+        region = idx + 1
+
+        x_int = jnp.array(list(regions[region][0]))
+        xj_int = jnp.array(list(regions[region][1]))
+        x_bound = jnp.array(list(regions[region][2]))
+        
+        xj_int_idx = jnp.where(jnp.isin(x_int, xj_int))[0]
+
+
+        X_int = x_r[:len(x_int) * 4].reshape((4,-1))
+        X_bound = x_r[len(x_int) * 4:].reshape((2,-1))
+
+
+        X_bound_v = X_bound.reshape(-1)
+        X_bound_v_e = X_bound_v[:len(X_bound_v) // 2]
+        X_bound_v_f = X_bound_v[len(X_bound_v) // 2:]
+    
+        bound_xj = jnp.sqrt(X_bound_v_e ** 2 +  X_bound_v_f ** 2)
+        #Arx^r -  xbar
+        int_xj = jnp.sqrt(X_int[2,xj_int_idx] ** 2 +  X_int[3,xj_int_idx] ** 2)
+
+        buses_idx = jnp.concatenate([xj_int,x_bound],dtype=jnp.int32)
+        xj_r_unsorted = jnp.concatenate([int_xj,bound_xj])
+    
+        sorted_indices = jnp.argsort(buses_idx)
+        buses_idx_sorted = buses_idx[sorted_indices]
+        xj_r = xj_r_unsorted[sorted_indices]
+        
+        for k,v in zip(buses_idx_sorted,xj_r):
+            xj_r_global[f'{k}_{region}'] = float(v)   
+    
+        
+
+        
+    
+    return xj_r_global
+
+
+def Ax_xbar_difference(xj_rl, xbar):
+
+    differences = {}
+    differences = {key: 0 for key in xj_rl.keys()}
+    for bus,global_copy in xbar.items():
+        local_copies_xj = {key:value for key,value in xj_rl.items() if key.startswith(str(bus))}
+        for local_bus,local_c in local_copies_xj.items():
+            differences[local_bus] = local_c - global_copy
 
     
+    return jnp.array(list(differences.values()))
+
+
+
+def xbar_update(xj_rl, xbar,y_arr, rho):
+    new_xbar = {}
+    for bus in xbar.keys():
+        local_copies = {key: value for key, value in xj_rl.items() if key.startswith(str(bus))}
+        numerator = 0
+        for local_bus, local_c in local_copies.items():
+            numerator += rho * local_c  + y_arr.get(local_bus)
+        new_xbar[bus] = float(jnp.clip(numerator / (len(local_copies) * rho), 0.94, 1.05999))
+    return new_xbar
+
+
+
+def objective(x_r_arr,net,regions):
+
+    #Objective function
+    total_cost = 0
+    for idx,x_r in enumerate(x_r_arr):
+        region = idx + 1
+        x_int = jnp.array(list(regions[region][0])) #Interior buses
+        x_bound = jnp.array(list(regions[region][1])) #Boundary buses
+        
+                        
+        pg = x_r[:len(x_int)]
+        gencost_data_r = net['gencost'][x_int, :][:,4:]
+
+        a = gencost_data_r[:,0]
+        b = gencost_data_r[:,1]
+        c = gencost_data_r[:,2]
+                
+        #c_r(x)
+        total_c_i = 0
+        for i in range(len(x_int)):
+            total_c_i += a[i] *  pg[i] ** 2 + b[i] * pg[i] + c[i]
+
+            
+        total_cost += total_c_i
+    
+    return total_cost
+
+
+
+
+
+
