@@ -32,7 +32,6 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,d,beta,alpha,x_r_arr0,bnds_xr_arr,xbar
     gcost_arr = [objective(x_r_arr,net,regions)]
     infeasibility_arr = [jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))]
     z_values = [jnp.linalg.norm(jnp.array(list(z_arr.values())))]
-    iteration_times = []
     """    
     print("Initial values and constraint violations for x_r0")
     for idx,x_r in enumerate(x_r_arr0):
@@ -52,13 +51,9 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,d,beta,alpha,x_r_arr0,bnds_xr_arr,xbar
     print(f'\n Total Generation cost: {objective(x_r_arr,net,regions)}')
     print(f'\n|| Axr + Bx ||: {jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))}')
     
-    end_time = time.time()
-    iteration_time = end_time - start_time
-    iteration_times.append(iteration_time)
 
 
     while jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar)) >=  (jnp.sqrt(d) * 1e-5):
-        start_time = time.time()
 
         """
         Outer Loop
@@ -227,10 +222,6 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,d,beta,alpha,x_r_arr0,bnds_xr_arr,xbar
 
         k += 1
 
-        end_time = time.time()
-        iteration_time = end_time - start_time
-        iteration_times.append(iteration_time)
-
         #if  jnp.abs(infeasibility_arr[-1] - infeasibility_arr[-2]) <= 1e-8:
         #    print("\nNo changes")
         #    break
@@ -241,7 +232,6 @@ def TwoLevel_ADMM_ACOPF(net,regions,G,B,S,d,beta,alpha,x_r_arr0,bnds_xr_arr,xbar
         "xbar": xbar,
         "infeasibility_arr": infeasibility_arr,
         "generation_cost_arr": gcost_arr,
-        "iteration_times": iteration_times
         
     }
 

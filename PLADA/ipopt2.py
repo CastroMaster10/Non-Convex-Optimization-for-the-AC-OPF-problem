@@ -2,15 +2,13 @@ from jax import config
 import jax.numpy as jnp
 from jax import jit,grad,jacfwd,jacrev
 from cyipopt import minimize_ipopt
-
-
 #Enable 64 bit floating point precision
 config.update("jax_enable_x64",True)
 #Use the CPU instead of GPU and mute all warnings if no GPU/TPU is found
 #config.update("jax_platform_name",'cpu')
 
 
-def ipopt(objective,con_eq,con_ineq,x0,bnds):
+def ipopt_x(objective,con_eq,con_ineq,x0,bnds):
 
     """
     Algorithmic Differentiation
@@ -72,11 +70,11 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
 
     #Executing the solver
     
-    #Executing the solver\
+    #Executing the solver
     if bnds:
         res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=x0,constraints=cons,bounds=bnds,options={
             'disp': True,
-            'hessian_approximation': 'limited-memory',
+            'hessian_approximation': 'exact',
             'constr_viol_tol': 1e-6,
             'obj_scaling_factor': 1e8,
             'mu_strategy': 'adaptive',
@@ -88,4 +86,47 @@ def ipopt(objective,con_eq,con_ineq,x0,bnds):
 
 
 
+    return res
+
+
+def ipopt_u(objective,con_eq,u0,bnds):
+
+    config.update("jax_enable_x64",True)
+
+    obj_jit = jit(objective)
+    obj_grad = jit(grad(obj_jit))  # objective gradient
+    obj_hess = jit(jacrev(jacfwd(obj_jit))) # objective hessian
+
+    '''    
+    con_eq_jit = jit(con_eq)
+    con_eq_jac = jit(jacfwd(con_eq_jit))  # jacobian
+    con_eq_hess = jacrev(jacfwd(con_eq_jit)) # hessian
+
+    def con_eq_hessvp(x, v):
+        H = con_eq_hess(x)  # H has shape (m, n, n)
+        # Compute the weighted sum of the Hessians
+        Hv = jnp.tensordot(v, H, axes=1)  # Sum over m constraints
+        return Hv  # Returns an array of shape (n, n)
+    
+        #constraints
+    cons = [
+            {
+                "type": 'eq',
+                'fun': con_eq_jit,
+                'jac':con_eq_jac,
+                'hess': con_eq_hessvp
+            }
+    ]
+   
+    '''
+
+
+    res = minimize_ipopt(obj_jit,jac=obj_grad,hess=obj_hess,x0=u0,options={
+            "tol": 1e-8,
+            "check_derivatives_for_naninf": "yes",                           # Tighten convergence tolerance for better accuracy
+            "hessian_approximation": 'limited-memory',
+            "max_iter": 500,                      # Increase max iterations to allow more time for convergence
+            "mu_strategy": "adaptive",             # Use adaptive barrier parameter strategy for stability
+
+    })
     return res

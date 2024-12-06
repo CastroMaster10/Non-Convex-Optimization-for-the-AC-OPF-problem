@@ -10,7 +10,6 @@ import time
 
 def ADMM_ACOPF(net,regions,G,B,S,d,rho,x_r_arr0,bnds_xr_arr0,xbar0,y_arr0,max_iter):
     
-    start_time = time.time()
 
 
     #Initialize values for Outer Loop
@@ -27,7 +26,7 @@ def ADMM_ACOPF(net,regions,G,B,S,d,rho,x_r_arr0,bnds_xr_arr0,xbar0,y_arr0,max_it
 
     gcost_arr = [objective(x_r_arr,net,regions)]
     infeasibility_arr = [jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))]
-    iteration_times = []
+
 
     """    
     print("Initial values and constraint violations for x_r0")
@@ -48,9 +47,6 @@ def ADMM_ACOPF(net,regions,G,B,S,d,rho,x_r_arr0,bnds_xr_arr0,xbar0,y_arr0,max_it
     print(f'\n Total Generation cost: {objective(x_r_arr,net,regions)}')
     print(f'\n|| Axr + Bx ||: {jnp.linalg.norm(Ax_xbar_difference(xj_rl,xbar))}')
     
-    end_time = time.time()
-    iteration_time = end_time - start_time
-    iteration_times.append(iteration_time)
 
 
 
@@ -176,9 +172,6 @@ def ADMM_ACOPF(net,regions,G,B,S,d,rho,x_r_arr0,bnds_xr_arr0,xbar0,y_arr0,max_it
 
         t += 1
 
-        end_time = time.time()
-        iteration_time = end_time - start_time
-        iteration_times.append(iteration_time)
 
         #if  jnp.abs(infeasibility_arr[-1] - infeasibility_arr[-2]) <= 1e-8:
         #    print("\nNo changes")
@@ -190,7 +183,6 @@ def ADMM_ACOPF(net,regions,G,B,S,d,rho,x_r_arr0,bnds_xr_arr0,xbar0,y_arr0,max_it
         "xbar": xbar,
         "infeasibility_arr": infeasibility_arr,
         "generation_cost_arr": gcost_arr,
-        "iteration_times": iteration_times
         
     }
 
